@@ -78,6 +78,39 @@ jobs:
         run: npm run desktop:smoke
       - name: Verify customer, accounting and permission HTTP flows
         run: npm run desktop:operations-smoke
+      - name: Verify synchronization HTTP flows
+        run: npm run desktop:sync-smoke
+      - name: Verify real web and PWA acceptance flows
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $workspaceUiLogDirectory = Join-Path $env:RUNNER_TEMP ('subscription-butler-workspace-ui-' + [guid]::NewGuid())
+          New-Item -ItemType Directory -Path $workspaceUiLogDirectory -Force | Out-Null
+          $workspaceUiStdout = Join-Path $workspaceUiLogDirectory 'stdout.log'
+          $workspaceUiStderr = Join-Path $workspaceUiLogDirectory 'stderr.log'
+          $workspaceUiResultPath = $null
+          try {
+            $workspaceUiExecutable = Join-Path $env:GITHUB_WORKSPACE 'desktop/node_modules/electron/dist/electron.exe'
+            $workspaceUiProcess = Start-Process -FilePath $workspaceUiExecutable -ArgumentList 'scripts/smoke-workspace-ui.cjs' -WorkingDirectory $env:GITHUB_WORKSPACE -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput $workspaceUiStdout -RedirectStandardError $workspaceUiStderr
+            $workspaceUiLastJson = Get-Content -LiteralPath $workspaceUiStdout | Where-Object { $_ -match '^\s*\{.*\}\s*$' } | Select-Object -Last 1
+            if (-not $workspaceUiLastJson) { throw 'Web/PWA acceptance did not produce a JSON result reference.' }
+            $workspaceUiReference = $workspaceUiLastJson | ConvertFrom-Json
+            if ([string]::IsNullOrWhiteSpace($workspaceUiReference.resultFile)) { throw 'Web/PWA acceptance did not report a result file.' }
+            $workspaceUiResultPath = $workspaceUiReference.resultFile
+            if (-not (Test-Path -LiteralPath $workspaceUiResultPath -PathType Leaf)) { throw 'Web/PWA acceptance result file is missing.' }
+            $workspaceUiResult = Get-Content -LiteralPath $workspaceUiResultPath -Raw | ConvertFrom-Json
+            if ($workspaceUiReference.status -ne 'ok' -or $workspaceUiResult.status -ne 'ok' -or @($workspaceUiResult.checks).Count -ne 4) { throw 'Web/PWA acceptance did not pass all four checks.' }
+            Write-Output "Web/PWA acceptance passed all four checks (Electron exit code $($workspaceUiProcess.ExitCode))."
+          } catch {
+            foreach ($workspaceUiLog in @($workspaceUiStdout, $workspaceUiStderr)) {
+              if (Test-Path -LiteralPath $workspaceUiLog -PathType Leaf) {
+                Write-Output "Acceptance log: $workspaceUiLog"
+                Get-Content -LiteralPath $workspaceUiLog | Write-Output
+              }
+            }
+            if ($workspaceUiResultPath -and (Test-Path -LiteralPath $workspaceUiResultPath -PathType Leaf)) { Get-Content -LiteralPath $workspaceUiResultPath -Raw | Write-Output }
+            throw
+          }
       - name: Smoke test packaged application
         shell: pwsh
         timeout-minutes: 5

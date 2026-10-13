@@ -1,6 +1,6 @@
 {
   "name": "subscription-butler-desktop",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "private": true,
   "description": "订阅管家 Windows 桌面软件",
   "main": "main.js",

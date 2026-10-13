@@ -14,11 +14,12 @@ export function outstandingMinor(snapshot:OperationsSnapshot,billId:string) {
   return Math.max(0,bill.data.amountMinor - bill.data.discountMinor - paid);
 }
 export function workbench(snapshot:OperationsSnapshot,today:string) {
+  const activeSubscriptions = new Set(snapshot.subscriptions.filter(row=>row.data.status === "active").map(row=>row.id));
   return {
     renewals:snapshot.rentals.filter(row=>row.data.status === "active" && dueCategory(row.data.endDate,today) !== "正常"),
     subscriptions:snapshot.subscriptions.filter(row=>row.data.status === "active" && dueCategory(row.data.endDate,today) !== "正常"),
     receivables:snapshot.bills.filter(row=>outstandingMinor(snapshot,row.id) > 0),
-    vacant:snapshot.slots.filter(row=>row.data.status === "available" && !snapshot.rentals.some(rental=>rental.data.slotId === row.id && rental.data.status === "active")),
+    vacant:snapshot.slots.filter(row=>row.data.status === "available" && activeSubscriptions.has(row.data.subscriptionId) && !snapshot.rentals.some(rental=>rental.data.slotId === row.id && rental.data.status === "active")),
   };
 }
 export function calendarDays(month:string) {

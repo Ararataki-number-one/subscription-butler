@@ -2,7 +2,7 @@
 
 一个以 Windows 本地使用为主的订阅经营软件，管理通用服务、ChatGPT Business、Pro 拼车、客户、租期、收支对账和到期事项。金额以人民币为主，同时显示美元参考值。也提供手机 PWA 和自行部署 HTTPS 中心的多设备同步。
 
-[下载 Windows 版本](https://github.com/Ararataki-number-one/subscription-butler/releases/latest) · [运营工作区](docs/workspace-usage.md) · [桌面备份](docs/desktop-maintenance.md) · [同步与权限](docs/sync-and-permissions.md) · [开发与构建](docs/development.md)
+[下载 Windows 版本](https://github.com/Ararataki-number-one/subscription-butler/releases/latest) · [运营工作区](docs/workspace-usage.md) · [桌面备份](docs/desktop-maintenance.md) · [同步与权限](docs/sync-and-permissions.md) · [目标完成记录](docs/goal-completion.md) · [开发与构建](docs/development.md)
 
 ## 能做什么
 
