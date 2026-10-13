@@ -8,6 +8,7 @@ import { listSpaceDetails } from "@/db/spaces";
 import { SpaceTable } from "@/components/spaces/space-table";
 import { SPACE_PLAN_TYPES } from "@/lib/space-plans";
 import { getAccountEarnings } from "@/db/teamEarnings";
+import { parseChannelFilter } from "@/lib/space-filters";
 
 // better-sqlite3 is a native module — keep this RSC on the Node runtime.
 export const dynamic = "force-dynamic";
@@ -19,13 +20,13 @@ export default async function SpacesPage({
 }) {
   const { country, channel, plan } = await searchParams;
   const selectedPlan = SPACE_PLAN_TYPES.find(type => type === plan);
-  const channelId = channel ? Number(channel) : undefined;
+  const channelId = parseChannelFilter(channel);
   const allSpaces = listSpaceDetails(db);
   const spaces = allSpaces.filter(({ space }) => {
     if (selectedPlan && space.planType !== selectedPlan) return false;
     if (country && space.country !== country) return false;
     if (
-      Number.isFinite(channelId) &&
+      channelId !== undefined &&
       space.paymentChannelId !== channelId
     ) {
       return false;
@@ -46,7 +47,7 @@ export default async function SpacesPage({
       teamEarnings={getAccountEarnings(db)}
       selectedCountry={country || undefined}
       selectedPlan={selectedPlan}
-      selectedChannel={Number.isFinite(channelId) ? channelId : undefined}
+      selectedChannel={channelId}
       spaceSoonDays={thresholds.spaceSoonDays}
     />
   );

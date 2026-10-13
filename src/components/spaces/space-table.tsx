@@ -21,6 +21,7 @@ import type { SpaceListRow } from "@/db/spaces";
 import { formatCountryLabel } from "@/lib/countries";
 import { formatCurrencyMinor } from "@/lib/currencies";
 import { SPACE_PLAN_OPTIONS, isProPlan, spacePlanLabel } from "@/lib/space-plans";
+import { parseChannelFilter } from "@/lib/space-filters";
 import { Badge } from "@/components/ui/badge";
 import type { TeamEarnings } from "@/db/teamEarnings";
 import { TeamEarningsSummary } from "./team-earnings-card";
@@ -296,7 +297,7 @@ export function SpaceTable({
     router.push(
       buildHref(
         selectedCountry,
-        value === "all" ? undefined : Number(value),
+          parseChannelFilter(value),
         selectedPlan,
       ),
     );

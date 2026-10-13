@@ -32,6 +32,7 @@ if (smokeTest) {
 let config;
 let mainWindow;
 let serverProcess;
+let stoppingServerProcess;
 let port;
 let isQuitting = false;
 let backendReady = false;
@@ -144,8 +145,11 @@ function terminateProcess(child) {
 function stopOwnedServer() { terminateProcess(serverProcess); }
 async function stopBackend() {
   backendReady = false;
-  const child = serverProcess; serverProcess = undefined;
-  await stopBackendAndCloseConnections(child, terminateProcess, () => session.defaultSession.closeAllConnections());
+  const child = serverProcess; stoppingServerProcess = child;
+  try {
+    await stopBackendAndCloseConnections(child, terminateProcess, () => session.defaultSession.closeAllConnections());
+    if (serverProcess === child) serverProcess = undefined;
+  } finally { stoppingServerProcess = undefined; }
 }
 async function startBackend() {
   config = loadConfig(app.getPath("userData"));
@@ -154,7 +158,7 @@ async function startBackend() {
   await runInitializer(runtime, environment, appendServerLog);
   const child = await launchBackend(runtime, environment, appendServerLog, { onSpawn: value => { serverProcess = value; } });
   child.once("exit", (code, signal) => {
-    if (serverProcess === child && !isQuitting) {
+    if (serverProcess === child && stoppingServerProcess !== child && !isQuitting) {
       backendReady = false;
       appendServerLog("desktop.log", `${new Date().toISOString()} BACKEND_EXIT ${signal || code}\n`);
       dialog.showErrorBox(`${APP_NAME} 服务已停止`, "本地数据服务意外停止，请重新打开程序。数据仍保存在本地数据目录。");

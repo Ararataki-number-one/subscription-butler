@@ -136,6 +136,13 @@ function initialize(dbFile, migrationsFolder, seedFile) {
   fs.mkdirSync(path.dirname(dbFile), { recursive: true });
   const sqlite = new Database(dbFile);
   try {
+    // Inspect existing pages and their WAL before migrations or seeds write to
+    // the ledger. An invalid log must not be hidden by a partial upgrade.
+    try {
+      if (sqlite.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("invalid integrity result");
+    } catch (error) {
+      throw new Error("Database integrity check failed; initialization stopped before writing", { cause: error });
+    }
     checkSchema(sqlite, migrationsFolder);
     sqlite.pragma("journal_mode = WAL"); sqlite.pragma("foreign_keys = ON");
     migrate(drizzle(sqlite), { migrationsFolder });

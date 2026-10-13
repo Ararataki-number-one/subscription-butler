@@ -65,6 +65,22 @@ function amount(database) {
   const sqlite = new Database(database, { readonly: true });
   try { return sqlite.prepare("SELECT amount_minor FROM space WHERE id=1").get().amount_minor; } finally { sqlite.close(); }
 }
+
+test("initialization rejects a corrupt account page before changing currency seeds", t => {
+  const data = fixture(t);
+  const db = new Database(data.database);
+  const rootPage = db.prepare("SELECT rootpage FROM sqlite_master WHERE name='child_account'").get().rootpage;
+  const pageSize = db.pragma("page_size", { simple: true }); db.close();
+  const bytes = fs.readFileSync(data.database);
+  bytes[(rootPage - 1) * pageSize] = 0xff;
+  fs.writeFileSync(data.database, bytes);
+  const seed = JSON.parse(fs.readFileSync(data.seed, "utf8"));
+  seed[0].countryName = "Changed country seed";
+  fs.writeFileSync(data.seed, JSON.stringify(seed));
+  const before = crypto.createHash("sha256").update(bytes).digest("hex");
+  assert.throws(() => initialize(data.database, migrations, data.seed), /integrity check failed; initialization stopped before writing/u);
+  assert.equal(crypto.createHash("sha256").update(fs.readFileSync(data.database)).digest("hex"), before);
+});
 test("online backup includes WAL commits and preserves encrypted security in an authenticated package", async t => {
   const data = fixture(t), file = path.join(data.directory, "snapshot.sbbackup");
   const connection = new Database(data.database); connection.pragma("journal_mode=WAL");

@@ -226,11 +226,12 @@ function requestHealth(port, timeoutMs = 1500) {
 
 function runInitializer(runtime, env, onLog = () => {}, timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
+    let diagnostic = "";
     const child = spawn(runtime.node, [runtime.initialize], {
       cwd: runtime.directory, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout.on("data", (chunk) => onLog("server.log", chunk));
-    child.stderr.on("data", (chunk) => onLog("server-error.log", chunk));
+    child.stderr.on("data", (chunk) => { diagnostic = (diagnostic + chunk).slice(0, 4096); onLog("server-error.log", chunk); });
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error("本地数据库初始化超时，请查看应用日志。"));
@@ -239,6 +240,7 @@ function runInitializer(runtime, env, onLog = () => {}, timeoutMs = 60000) {
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve();
+      else if (diagnostic.includes("Database integrity check failed")) reject(new Error("本地账本完整性检查失败，已停止写入。请保留数据目录并使用兼容备份恢复。"));
       else reject(new Error(`本地数据库初始化失败（退出码 ${code}），请查看应用日志。`));
     });
   });

@@ -179,6 +179,8 @@ test("initializer runs with bundled Node and propagates migration failure", asyn
   assert.equal(fs.readFileSync(marker, "utf8"), "ready");
   fs.writeFileSync(runtime.initialize, "process.exit(7)");
   await assert.rejects(runInitializer(runtime, process.env), /退出码 7/u);
+  fs.writeFileSync(runtime.initialize, 'console.error("Database integrity check failed; initialization stopped before writing");process.exit(1);');
+  await assert.rejects(runInitializer(runtime, process.env), /账本完整性检查失败，已停止写入/u);
 });
 
 test("launcher waits for healthy service then stops child cleanly", async (t) => {
