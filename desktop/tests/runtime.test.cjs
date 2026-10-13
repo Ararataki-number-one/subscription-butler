@@ -7,7 +7,7 @@ const path = require("node:path");
 const { EventEmitter, once } = require("node:events");
 const { test } = require("node:test");
 const {
-  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
+  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createConfig, createLocalOwnerSession, ensureLocalWorkspaceReady, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
   loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, validateLoginKey,
 } = require("../runtime.js");
 
@@ -240,4 +240,49 @@ test("desktop startup clears obsolete service workers only, preserving cookies a
   assert.equal(operations[0].storages.includes("cookies"), false);
   assert.equal(operations[0].storages.includes("indexdb"), false);
   assert.equal(operations[0].storages.includes("localstorage"), false);
+});
+
+function readyWorkspace() {
+  return { actor: { id: "local-admin", role: "admin" }, snapshot: { version: 1,
+    channels: [], customers: [], templates: [], plans: [], subscriptions: [], slots: [], rentals: [], bills: [], entries: [] } };
+}
+test("workspace readiness reads the actual localhost snapshot with a private native owner cookie", async t => {
+  const owner = createLocalOwnerSession("a".repeat(64)).value;
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    requests.push({ method: request.method, path: request.url, cookie: request.headers.cookie });
+    response.setHeader("Content-Type", "application/json"); response.end(JSON.stringify(readyWorkspace()));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  assert.equal(await ensureLocalWorkspaceReady(server.address().port, owner), undefined);
+  assert.deepEqual(requests, [{ method: "GET", path: "/api/operations/snapshot", cookie: `tam_session=${encodeURIComponent(owner)}` }]);
+});
+test("workspace readiness refuses an unauthorized or non-admin response before displaying the ledger", async () => {
+  const owner = createLocalOwnerSession("a".repeat(64)).value;
+  for (const status of [401, 403]) {
+    await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => ({ status })), /授权未通过/u);
+  }
+  for (const role of ["customer", "staff", undefined]) {
+    const value = readyWorkspace(); value.actor.role = role;
+    await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => ({ status: 200, json: async () => value })), /未取得管理员权限/u);
+  }
+});
+test("workspace readiness reports backend, transport and malformed snapshot errors without revealing credentials", async () => {
+  const owner = createLocalOwnerSession("a".repeat(64)).value;
+  await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => { throw new Error(owner); }), error => /读取工作台数据失败或超时/u.test(error.message) && !error.message.includes(owner));
+  for (const status of [302, 500]) {
+    await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => ({ status })), new RegExp(`HTTP ${status}`, "u"));
+  }
+  await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => ({ status: 200, json: async () => { throw new Error(owner); } })), /数据无法读取/u);
+  const value = readyWorkspace(); delete value.snapshot.entries;
+  await assert.rejects(ensureLocalWorkspaceReady(31337, owner, async () => ({ status: 200, json: async () => value })), /尚未准备完整/u);
+});
+test("workspace readiness rejects invalid native credentials before sending any request", async () => {
+  let requests = 0;
+  const transport = async () => { requests += 1; assert.fail("invalid native input must not reach transport"); };
+  const owner = createLocalOwnerSession("a".repeat(64)).value;
+  for (const port of [0, 65536, "31337"]) await assert.rejects(ensureLocalWorkspaceReady(port, owner, transport), /授权信息无效/u);
+  for (const cookie of [null, "sbm_member", `${owner}\r\nHost: attacker`]) await assert.rejects(ensureLocalWorkspaceReady(31337, cookie, transport), /授权信息无效/u);
+  assert.equal(requests, 0);
 });

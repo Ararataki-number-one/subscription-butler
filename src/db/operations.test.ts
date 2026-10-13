@@ -10,6 +10,7 @@ import { motherAccount, space } from "./schema";
 import { OperationsError, OperationsStore } from "./operations";
 import { allocateCostToRentals, calculatePricing } from "@/lib/operations/report";
 import { shanghaiToday } from "@/lib/operations/utils";
+import { previewCsv, writeCsv } from "@/lib/workspace/csv";
 import type { OpsCommand } from "@/lib/operations/types";
 
 describe("operational ledger acceptance", () => {
@@ -271,5 +272,45 @@ describe("operational ledger acceptance", () => {
     expect(allocateCostToRentals(final, "entry:early-cost", "2026-10-01", "2026-10-15").rentals[0].usdMinor).toBe(350);
     expect(allocateCostToRentals(final, "entry:early-cost", "2026-10-15", "2026-10-20").rentals[0].usdMinor).toBe(375);
     const costs = allocateCostToRentals(final, "entry:early-cost"); expect(costs.rentals[0].usdMinor).toBe(725); expect(costs.unallocatedUsd).toBe(2375);
+  });
+  it("legacy country and first activation remain distinct from the current paid period", () => {
+    const fixture = legacy(); ctx.db.update(space).set({ openingDate: "2025-09-01" }).where(eq(space.id, fixture.sub.id)).run();
+    let record = store.snapshot().subscriptions[0]; expect(record.data.countryCode).toBe("GB"); expect(record.data.openingDate).toBe("2025-09-01"); expect(record.data.startDate).toBe("2026-01-01");
+    run("subscription.save", { id: record.id, expectedRevision: record.revision, startDate: "2026-02-01" });
+    record = store.snapshot().subscriptions[0]; run("subscription.renew", { id: record.id, expectedRevision: record.revision, date: "2026-02-01" });
+    expect(store.snapshot().subscriptions[0].data.openingDate).toBe("2025-09-01"); expect(store.snapshot().subscriptions[0].data.countryCode).toBe("GB");
+  });
+  it("owned older projections backfill new optional fields once even with an already matching source fingerprint", () => {
+    legacy(); const projected = store.snapshot().subscriptions[0]; const older = structuredClone(projected.data);
+    delete older.countryCode; delete older.openingDate; older.legacy!.managedFields = older.legacy!.managedFields.filter(key => key !== "countryCode" && key !== "openingDate");
+    ctx.sqlite.prepare("UPDATE ops_record SET data=? WHERE id=?").run(JSON.stringify(older), projected.id);
+    const backfilled = store.snapshot(); expect(backfilled.subscriptions[0].data.countryCode).toBe("GB"); expect(backfilled.subscriptions[0].data.openingDate).toBe("2026-01-01");
+    expect(backfilled.subscriptions[0].data.legacy!.managedFields).toEqual(expect.arrayContaining(["countryCode", "openingDate"]));
+    expect(store.snapshot().changeSeq).toBe(backfilled.changeSeq);
+  });
+  it("edited or explicitly cleared source fields never get restored by later legacy refresh", () => {
+    const fixture = legacy(); let record = store.snapshot().subscriptions[0];
+    run("subscription.save", { id: record.id, expectedRevision: record.revision, countryCode: "us", openingDate: "2025-02-01" });
+    ctx.db.update(space).set({ country: "FR", openingDate: "2024-05-23" }).where(eq(space.id, fixture.sub.id)).run();
+    record = store.snapshot().subscriptions[0]; expect(record.data.countryCode).toBe("US"); expect(record.data.openingDate).toBe("2025-02-01");
+    run("subscription.save", { id: record.id, expectedRevision: record.revision, countryCode: "", openingDate: null });
+    ctx.db.update(space).set({ country: "CA", openingDate: "2024-08-13" }).where(eq(space.id, fixture.sub.id)).run();
+    record = store.snapshot().subscriptions[0]; expect(record.data.countryCode).toBeUndefined(); expect(record.data.openingDate).toBeUndefined(); expect(record.data.legacy!.detachedFields).toEqual(expect.arrayContaining(["countryCode", "openingDate"]));
+    const seq = store.snapshot().changeSeq; expect(store.snapshot().changeSeq).toBe(seq);
+  });
+  it("old subscriptions without optional fields remain valid and invalid new values roll back", () => {
+    const fixture = setup(); const before = store.snapshot(); expect(fixture.subscription.data.countryCode).toBeUndefined(); expect(fixture.subscription.data.openingDate).toBeUndefined();
+    expect(() => run("subscription.save", { id: fixture.subscription.id, expectedRevision: fixture.subscription.revision, countryCode: "United Kingdom" })).toThrow(/国家代码/);
+    expect(() => run("subscription.save", { id: fixture.subscription.id, expectedRevision: fixture.subscription.revision, openingDate: "2026-02-30" })).toThrow(/格式无效/);
+    expect(store.snapshot()).toEqual(before);
+  });
+  it("subscription CSV optional fields survive parsing and commands while missing old columns stay compatible", () => {
+    const csv = writeCsv([["name", "service", "currency", "amountMinor", "startDate", "countryCode", "openingDate"], ["Synthetic CSV", "Generic SaaS", "CNY", 1000, "2026-01-01", "GB", "2025-09-01"]]);
+    const preview = previewCsv(csv, ["name", "service", "currency", "amountMinor", "startDate"]); expect(preview.errors).toHaveLength(0);
+    run("import.commit", { rows: preview.rows.map(row => ({ type: "subscription.save", payload: { ...row, amountMinor: Number(row.amountMinor) } })) });
+    const record = store.snapshot().subscriptions[0]; expect(record.data.countryCode).toBe("GB"); expect(record.data.openingDate).toBe("2025-09-01");
+    const parsedExport = previewCsv(writeCsv([["countryCode", "openingDate"], [record.data.countryCode, record.data.openingDate]]), []); expect(parsedExport.rows[0]).toEqual({ countryCode: "GB", openingDate: "2025-09-01" });
+    run("import.commit", { rows: [{ type: "subscription.save", payload: { name: "Older CSV", service: "Generic SaaS", currency: "CNY", amountMinor: 500, startDate: "2026-01-01" } }] });
+    expect(store.snapshot().subscriptions).toHaveLength(2); expect(store.snapshot().subscriptions.find(row => row.data.name === "Older CSV")!.data.countryCode).toBeUndefined();
   });
 });

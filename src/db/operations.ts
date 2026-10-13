@@ -105,7 +105,7 @@ export class OperationsStore {
     this.sqlite.prepare("INSERT INTO ops_audit(command_id,actor_id,action,record_ids,reason,created_at) VALUES(?,?,?,?,?,?)").run(context.id, context.actor.id, context.type, JSON.stringify([...context.changed]), reason, new Date().toISOString());
   }
   private detach<T extends OpsData>(data: T, fields: string[]): T {
-    return data.legacy ? { ...data, legacy: { ...data.legacy, managedFields: data.legacy.managedFields.filter(field => !fields.includes(field)) } } : data;
+    return data.legacy ? { ...data, legacy: { ...data.legacy, managedFields: data.legacy.managedFields.filter(field => !fields.includes(field)), detachedFields: [...new Set([...(data.legacy.detachedFields ?? []), ...fields])] } } : data;
   }
   private claimLegacyFields(id: string, kind: OpsKind, fields: string[], context: Context) {
     const record = this.get(id, kind);
@@ -139,15 +139,18 @@ export class OperationsStore {
           continue;
         }
         const current = decode(prior); const link = current.data.legacy;
-        if (!link || link.fingerprint === candidate.data.legacy?.fingerprint && link.present) continue;
+        const currentData = current.data as OpsData & Record<string, unknown>;
+        const candidateData = candidate.data as OpsData & Record<string, unknown>;
+        const backfillFields = ["cycleAnchorDay", "countryCode", "openingDate"].filter(key => currentData[key] === undefined && candidateData[key] !== undefined && !link?.detachedFields?.includes(key));
+        if (!link || link.fingerprint === candidate.data.legacy?.fingerprint && link.present && !backfillFields.length) continue;
         if (candidate.kind === "entry") {
           this.write(candidate.kind, candidate.id, { ...current.data, legacy: { ...link, fingerprint: candidate.data.legacy!.fingerprint, present: true, conflict: "旧收款来源已更改；冻结金额保留，请用退款或作废调整。" } }, context, current.revision);
           continue;
         }
         const next = { ...current.data } as OpsData & Record<string, unknown>;
-        for (const key of link.managedFields) next[key] = (candidate.data as OpsData & Record<string, unknown>)[key];
-        if (!("cycleAnchorDay" in current.data) && "cycleAnchorDay" in candidate.data) next.cycleAnchorDay = candidate.data.cycleAnchorDay;
-        next.legacy = { ...link, sources: candidate.data.legacy!.sources, fingerprint: candidate.data.legacy!.fingerprint, present: true };
+        for (const key of link.managedFields) if (!link.detachedFields?.includes(key)) next[key] = candidateData[key];
+        for (const key of backfillFields) next[key] = candidateData[key];
+        next.legacy = { ...link, managedFields: [...new Set([...link.managedFields, ...backfillFields])], sources: candidate.data.legacy!.sources, fingerprint: candidate.data.legacy!.fingerprint, present: true };
         this.write(candidate.kind, candidate.id, next, context, current.revision);
       }
       for (const record of this.all()) {
@@ -201,7 +204,7 @@ export class OperationsStore {
     return { usdMinor, cnyMinor, fx: { rateToUsd: quote.rateToUsd, rateToCny: cny ? (Number(quote.rateToUsd) / Number(cny.rateToUsd)).toFixed(18).replace(/0+$/, "").replace(/\.$/, "") : null, cnyRateToUsd: cny?.rateToUsd ?? null, quoteDate: quote.quoteDate, fetchedAt: quote.fetchedAt, source: quote.source, minorUnit: quote.minorUnit } };
   }
   private save(command: OpsCommand, context: Context, kind: "customer" | "template" | "subscription" | "slot") {
-    const payload = command.payload; const id = text(payload.id) || `${kind}:${command.id}`; const prior = this.find(id) ? this.get(id, kind) : undefined;
+    const payload = Object.fromEntries(Object.entries(command.payload).filter(([, value]) => value !== undefined)); const id = text(payload.id) || `${kind}:${command.id}`; const prior = this.find(id) ? this.get(id, kind) : undefined;
     if (prior) this.expected(command, prior);
     const previous = prior?.data as OpsData & Record<string, unknown> | undefined;
     const value: Record<string, unknown> = { ...previous, ...payload };
@@ -229,7 +232,9 @@ export class OperationsStore {
         const startDate = date(merged.startDate ?? today());
         const cycleAnchorDay = integer(payload.cycleAnchorDay ?? (payload.startDate && payload.startDate !== previous?.startDate ? Number(startDate.slice(8, 10)) : merged.cycleAnchorDay ?? Number(startDate.slice(8, 10))), "周期锚点", 1); if (cycleAnchorDay > 31) invalid("周期锚点不能超过 31。");
         const endDate = date(payload.endDate ?? (prior && payload.period === undefined && payload.startDate === undefined ? merged.endDate : undefined) ?? addPeriod(startDate, common.period, cycleAnchorDay));
-        data = { ...common, ...range(startDate, endDate), cycleAnchorDay, account: text(merged.account), ...(merged.templateId ? { templateId: text(merged.templateId) } : {}), status: merged.status === "disabled" ? "disabled" : "active" };
+        const countryCode = text(merged.countryCode).toUpperCase(); if (countryCode && !/^[A-Z]{2}$/.test(countryCode)) invalid("国家代码需为两位英文字母。");
+        const openingDate = text(merged.openingDate) ? date(merged.openingDate, "首次开通日") : undefined;
+        data = { ...common, ...range(startDate, endDate), cycleAnchorDay, ...(countryCode ? { countryCode } : {}), ...(openingDate ? { openingDate } : {}), account: text(merged.account), ...(merged.templateId ? { templateId: text(merged.templateId) } : {}), status: merged.status === "disabled" ? "disabled" : "active" };
       }
     }
     data = this.detach(data, Object.keys(payload));

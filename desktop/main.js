@@ -5,7 +5,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createLocalOwnerSession, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
+  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createLocalOwnerSession, ensureLocalWorkspaceReady, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
   loadConfig, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, writeEnvironmentFile,
 } = require("./runtime.js");
 const { BackupManager, writeJsonAtomic } = require("./backups.js");
@@ -161,14 +161,16 @@ async function startBackend() {
       app.quit();
     }
   });
+  const ownerCookie = await authorizeLocalDesktop();
+  await ensureLocalWorkspaceReady(port, ownerCookie);
   backendReady = true;
-  await authorizeLocalDesktop();
   if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(appUrl("/workspace"));
 }
 async function authorizeLocalDesktop() {
   const ownerSession = createLocalOwnerSession(config.authSecret);
   await session.defaultSession.cookies.set({ url: appUrl(), name: "tam_session", value: ownerSession.value,
     path: "/", httpOnly: true, sameSite: "lax", secure: false, expirationDate: Math.floor(ownerSession.expiresAt / 1000) });
+  return ownerSession.value;
 }
 async function enterLocalWorkspace() {
   if (!backendReady || maintenanceBusy) throw new Error("本地服务尚未准备好，请稍后重试。");
@@ -441,11 +443,7 @@ async function bootstrap() {
         await createWindow(); installCredentialHandlers();
       }
       config = initializeLocalConfig(userDataDirectory);
-      writeEnvironmentFile(userDataDirectory, config);
-      const environment = backendEnvironment(config, userDataDirectory, port);
-      await runInitializer(runtime, environment, appendServerLog);
-      await launchBackend(runtime, environment, appendServerLog, { onSpawn: (child) => { serverProcess = child; } });
-      backendReady = true; await authorizeLocalDesktop();
+      await startBackend();
       const response = await fetch(appUrl("/login"), { signal: AbortSignal.timeout(10000), redirect: "manual" });
       if (response.status !== 200) throw new Error(`登录页面检查失败（HTTP ${response.status}）。`);
       if (uiSmokeTest) {

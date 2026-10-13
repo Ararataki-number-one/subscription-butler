@@ -288,9 +288,42 @@ async function clearDesktopWorkerCache(desktopSession) {
   // older desktop build. Preserve its cookies, IndexedDB outbox and settings.
   await desktopSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] });
 }
+async function ensureLocalWorkspaceReady(port, ownerCookie, transport = fetch) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535 ||
+      typeof ownerCookie !== "string" || !/^v1\.\d{1,16}\.[a-f0-9-]{36}\.[a-f0-9]{64}$/u.test(ownerCookie)) {
+    throw new Error("本机工作区授权信息无效，请重新打开订阅管家。");
+  }
+  let response;
+  try {
+    // Reading the snapshot projects the imported legacy ledger before showing
+    // the workspace. This does not execute financial commands or reminders.
+    response = await transport(`http://${LOCAL_HOST}:${port}/api/operations/snapshot`, {
+      method: "GET", headers: { Cookie: `tam_session=${encodeURIComponent(ownerCookie)}` },
+      redirect: "manual", signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    throw new Error("本地服务已启动，但读取工作台数据失败或超时。请重新打开订阅管家；账本仍保存在本机。");
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error("本机工作区授权未通过，暂时无法读取账本。请重新打开订阅管家并检查本地安全配置。");
+  }
+  if (response.status !== 200) {
+    throw new Error(`工作台数据准备失败（HTTP ${response.status}）。请查看应用日志；原账本仍保存在本机。`);
+  }
+  let value;
+  try { value = await response.json(); }
+  catch { throw new Error("本地工作台返回的数据无法读取，请查看应用日志后重新打开订阅管家。"); }
+  if (value?.actor?.role !== "admin" || typeof value.actor.id !== "string" || !value.actor.id) {
+    throw new Error("本机工作区未取得管理员权限，已停止加载账本。请检查本地安全配置。");
+  }
+  const fields = ["channels", "customers", "templates", "plans", "subscriptions", "slots", "rentals", "bills", "entries"];
+  if (value.snapshot?.version !== 1 || !fields.every(field => Array.isArray(value.snapshot[field]))) {
+    throw new Error("工作台账本数据尚未准备完整，已停止加载。请查看应用日志；原账本仍保存在本机。");
+  }
+}
 
 module.exports = {
   LOCAL_HOST, assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig,
-  launchBackend, loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths,
+  ensureLocalWorkspaceReady, launchBackend, loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths,
   stopBackendAndCloseConnections, trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
 };
