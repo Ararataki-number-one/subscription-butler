@@ -7,7 +7,7 @@ const path = require("node:path");
 const { EventEmitter, once } = require("node:events");
 const { test } = require("node:test");
 const {
-  assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
+  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
   loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, validateLoginKey,
 } = require("../runtime.js");
 
@@ -232,4 +232,12 @@ test("failed backend termination does not proceed to clear sockets or a replacem
   let closed = false;
   await assert.rejects(stopBackendAndCloseConnections(child, () => {}, async () => { closed = true; }, 10), /停止超时/u);
   assert.equal(closed, false); assert.equal(child.listenerCount("exit"), 0);
+});
+test("desktop startup clears obsolete service workers only, preserving cookies and IndexedDB queues", async () => {
+  const operations = [];
+  await clearDesktopWorkerCache({ clearStorageData: async options => operations.push(options) });
+  assert.deepEqual(operations, [{ storages: ["serviceworkers", "cachestorage"] }]);
+  assert.equal(operations[0].storages.includes("cookies"), false);
+  assert.equal(operations[0].storages.includes("indexdb"), false);
+  assert.equal(operations[0].storages.includes("localstorage"), false);
 });

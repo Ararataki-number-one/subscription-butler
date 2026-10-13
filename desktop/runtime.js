@@ -283,9 +283,14 @@ async function stopBackendAndCloseConnections(child, terminate, closeConnections
   // that just exited, even after Node reports the replacement service healthy.
   await closeConnections();
 }
+async function clearDesktopWorkerCache(desktopSession) {
+  // This dedicated application session may contain workers installed by an
+  // older desktop build. Preserve its cookies, IndexedDB outbox and settings.
+  await desktopSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] });
+}
 
 module.exports = {
-  LOCAL_HOST, assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig,
+  LOCAL_HOST, assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig,
   launchBackend, loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths,
   stopBackendAndCloseConnections, trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
 };

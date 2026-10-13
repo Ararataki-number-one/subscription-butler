@@ -34,15 +34,26 @@ self.addEventListener("fetch", event => {
   if (request.mode === "navigate" && url.pathname === "/workspace" && !url.search) {
     event.respondWith(fetch(request).then(async response => {
       if (response.ok && response.headers.get("content-type")?.includes("text/html")) {
-        await (await caches.open(PUBLIC_CACHE)).put("/workspace", response.clone());
+        // Cache availability is optional; a healthy network response must still
+        // reach the window when storage is blocked or the quota is exhausted.
+        try { await (await caches.open(PUBLIC_CACHE)).put("/workspace", response.clone()); } catch { /* Keep the live response. */ }
         event.waitUntil(cachePublicShell().catch(() => {}));
       }
       return response;
-    }).catch(async () => (await caches.open(PUBLIC_CACHE)).match("/workspace") || new Response("工作台尚未缓存。请联网打开一次后再离线使用。", { status: 503, headers: { "content-type": "text/plain;charset=utf-8" } })));
-  } else if (publicAsset(url)) {
-    event.respondWith(caches.open(PUBLIC_CACHE).then(async cache => {
-      const cached = await cache.match(url.href); if (cached) return cached;
-      const response = await fetch(url.href, { credentials: "omit" }); if (response.ok) await cache.put(url.href, response.clone()); return response;
+    }).catch(async () => {
+      let cached;
+      try { cached = await (await caches.open(PUBLIC_CACHE)).match("/workspace"); } catch { /* No usable cache. */ }
+      // Cache.match returns a Promise. Await it before testing cache absence,
+      // otherwise respondWith resolves to undefined and Chromium ERR_FAILED.
+      return cached || new Response("工作台尚未缓存。请联网打开一次后再离线使用。", { status: 503, headers: { "content-type": "text/plain;charset=utf-8" } });
     }));
+  } else if (publicAsset(url)) {
+    event.respondWith((async () => {
+      let cache;
+      try { cache = await caches.open(PUBLIC_CACHE); const cached = await cache.match(url.href); if (cached) return cached; } catch { /* Try the network. */ }
+      const response = await fetch(url.href, { credentials: "omit" });
+      if (response.ok && cache) { try { await cache.put(url.href, response.clone()); } catch { /* Keep the live response. */ } }
+      return response;
+    })());
   }
 });

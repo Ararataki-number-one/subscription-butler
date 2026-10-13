@@ -163,7 +163,7 @@ export function Workspace() {
     setDesktopMode(windowDesktop());
     activeToken.current=sessionStorage.getItem("ops-token") ?? "";setToken(activeToken.current);
     void refresh();
-    if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/operations-sw.js",{scope:"/workspace"}).catch(()=>undefined);
+    if ("serviceWorker" in navigator && !windowDesktop()) void navigator.serviceWorker.register("/operations-sw.js",{scope:"/workspace"}).catch(()=>undefined);
   },[refresh]);
   useEffect(()=>{
     const online = ()=>{setOffline(false);void flush().catch(failure=>setError(failure.message));};

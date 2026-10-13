@@ -6,9 +6,9 @@ import { describe, expect, it } from "vitest";
 type WorkerEvent = { request?: Request; data?: unknown; waitUntil(value: Promise<unknown>): void; respondWith(value: Promise<Response>): void };
 function worker() {
   const listeners = new Map<string, (event: WorkerEvent) => void>(), entries = new Map<string, Response>(), pending: Promise<unknown>[] = [];
-  let response: Promise<Response> | undefined, offline = false;
+  let response: Promise<Response> | undefined, offline = false, blockedWrites = false;
   const requests: { url: string; credentials: unknown }[] = [];
-  const cache = { put: async (key: string, value: Response) => { expect(typeof key).toBe("string"); entries.set(new URL(key, "https://ledger.example.com").href, value.clone()); },
+  const cache = { put: async (key: string, value: Response) => { if (blockedWrites) throw new Error("cache write unavailable"); expect(typeof key).toBe("string"); entries.set(new URL(key, "https://ledger.example.com").href, value.clone()); },
     match: async (key: string) => entries.get(new URL(key, "https://ledger.example.com").href)?.clone() };
   runInNewContext(readFileSync(resolve("public/operations-sw.js"), "utf8"), {
     URL, Response, self: { location: { origin: "https://ledger.example.com" }, addEventListener: (type: string, handler: (event: WorkerEvent) => void) => listeners.set(type, handler), skipWaiting: () => Promise.resolve(), clients: { claim: () => Promise.resolve() } },
@@ -20,7 +20,7 @@ function worker() {
     },
   });
   const event = (request?: Request): WorkerEvent => ({ request, waitUntil: promise => pending.push(promise), respondWith: promise => { response = promise; } });
-  return { listeners, entries, requests, event, offline: () => { offline = true; }, async settled() { while (pending.length) await Promise.all(pending.splice(0)); }, result: () => response };
+  return { listeners, entries, requests, event, offline: () => { offline = true; }, blockCacheWrites: () => { blockedWrites = true; }, async settled() { while (pending.length) await Promise.all(pending.splice(0)); }, result: () => response };
 }
 describe("PWA cache boundary", () => {
   it("preloads only the verified public workspace shell and same-origin static assets", async () => {
@@ -43,5 +43,19 @@ describe("PWA cache boundary", () => {
     state.listeners.get("fetch")!(state.event(request)); const response = await state.result()!;
     const text = await response.text(); expect(text).toContain("public.js"); expect(text).not.toContain("synthetic-private-token");
     expect([...state.entries.keys()].join(" ")).not.toContain("synthetic-private-token");
+  });
+  it("always returns a Response when navigation fails before the public shell was cached", async () => {
+    const state = worker(); state.offline();
+    const request = new Request("https://ledger.example.com/workspace"); Object.defineProperty(request, "mode", { value: "navigate" });
+    state.listeners.get("fetch")!(state.event(request)); const response = await state.result()!;
+    expect(response).toBeInstanceOf(Response); expect(response.status).toBe(503);
+    expect(await response.text()).toContain("工作台尚未缓存");
+  });
+  it("does not discard a healthy network response just because optional cache storage failed", async () => {
+    const state = worker(); state.blockCacheWrites();
+    const request = new Request("https://ledger.example.com/workspace"); Object.defineProperty(request, "mode", { value: "navigate" });
+    state.listeners.get("fetch")!(state.event(request)); const response = await state.result()!;
+    expect(response).toBeInstanceOf(Response); expect(response.status).toBe(200);
+    expect(await response.text()).toContain("public.js");
   });
 });

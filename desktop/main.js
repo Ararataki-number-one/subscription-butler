@@ -5,7 +5,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const {
-  assertSmokeDirectory, backendEnvironment, createLocalOwnerSession, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
+  assertSmokeDirectory, backendEnvironment, clearDesktopWorkerCache, createLocalOwnerSession, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
   loadConfig, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, writeEnvironmentFile,
 } = require("./runtime.js");
 const { BackupManager, writeJsonAtomic } = require("./backups.js");
@@ -434,6 +434,7 @@ async function bootstrap() {
       : process.env.SUBSCRIPTION_BUTLER_RUNTIME_DIR || path.join(__dirname, "runtime");
     runtime = runtimePaths(runtimeDirectory);
     port = await persistentLoopbackPort(userDataDirectory);
+    await clearDesktopWorkerCache(session.defaultSession);
     if (smokeTest) {
       if (uiSmokeTest) {
         if (loadConfig(userDataDirectory)) throw new Error("首次 UI 验收必须使用新的独立测试目录。");

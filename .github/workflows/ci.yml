@@ -61,6 +61,15 @@ jobs:
         run: npm ci
       - name: Install desktop dependencies
         run: npm --prefix desktop ci
+      - name: Install and verify locked Electron runtime
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+          node desktop/node_modules/electron/install.js
+          if ($LASTEXITCODE -ne 0) { throw 'Locked Electron runtime installation failed.' }
+          node -e 'const fs=require("node:fs"),path=require("node:path");const base=path.resolve("desktop/node_modules/electron");const manifest=require(path.join(base,"package.json"));const version=fs.readFileSync(path.join(base,"dist/version"),"utf8").trim().replace(/^v/,"");const executable=fs.readFileSync(path.join(base,"path.txt"),"utf8").trim();if(version!==manifest.version||executable!=="electron.exe")throw new Error("Electron runtime version/platform mismatch");const directory=fs.realpathSync.native(path.join(base,"dist"));const binary=fs.realpathSync.native(path.join(directory,executable));if(!binary.toLowerCase().startsWith((directory+path.sep).toLowerCase())||!fs.statSync(binary).isFile())throw new Error("Electron runtime executable is invalid");console.log(JSON.stringify({electronVersion:version,platform:process.platform,arch:process.arch,runtimeVerified:true}));'
+          if ($LASTEXITCODE -ne 0) { throw 'Locked Electron runtime verification failed.' }
       - name: Desktop tests
         run: npm run desktop:test
       - name: Package Windows application
