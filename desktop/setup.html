@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; form-action 'none'; base-uri 'none'">
+  <title>订阅管家 · 首次设置</title>
+  <link rel="stylesheet" href="setup.css">
+  <script src="setup.js" defer></script>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">订</div>
+    <h1>欢迎使用订阅管家</h1>
+    <p class="intro">设置登录密钥，保护这台电脑上的订阅与收益资料。</p>
+    <form id="setup-form">
+      <label for="login-key">登录密钥</label>
+      <input id="login-key" type="password" minlength="8" maxlength="256" autocomplete="new-password" required autofocus aria-describedby="key-hint">
+      <p id="key-hint" class="hint">至少 8 个字符，请自行保存。</p>
+      <label for="confirmation">再次输入</label>
+      <input id="confirmation" type="password" minlength="8" maxlength="256" autocomplete="new-password" required>
+      <p id="error-message" class="error" role="alert" aria-live="polite"></p>
+      <button type="submit" id="submit-button">保存并开始使用</button>
+    </form>
+    <p class="footnote">资料保存在本机。后续更新程序会继续使用已有数据。</p>
+  </main>
+</body>
+</html>

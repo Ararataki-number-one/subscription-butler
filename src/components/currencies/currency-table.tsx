@@ -1,0 +1,190 @@
+// Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
+"use client";
+
+import { useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import type { CurrencyRow } from "@/db/currencies";
+import type { CurrencyMeta } from "@/lib/currencies";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { CurrencyDialog } from "./currency-dialog";
+import { CurrencyDeleteDialog } from "./currency-delete-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+type CurrencyTableProps = {
+  currencies: CurrencyRow[];
+  rateCurrencies: readonly CurrencyMeta[];
+};
+
+type DialogState =
+  | { mode: "add" }
+  | { mode: "edit"; currency: CurrencyRow }
+  | null;
+
+export function CurrencyTable({
+  currencies,
+  rateCurrencies,
+}: CurrencyTableProps) {
+  const [dialog, setDialog] = useState<DialogState>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CurrencyRow | null>(null);
+  const [countryQuery, setCountryQuery] = useState("");
+  const existingCodes = currencies.map((currency) => currency.code);
+  const normalizedCountryQuery = countryQuery.trim().toLowerCase();
+  const filteredCurrencies = normalizedCountryQuery
+    ? currencies.filter((currency) =>
+        [
+          currency.countryName,
+          currency.countryCode,
+          currency.name,
+          currency.code,
+        ].some((value) =>
+          value.toLowerCase().includes(normalizedCountryQuery),
+        ),
+      )
+    : currencies;
+
+  return (
+    <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 border-b bg-background/95 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">币种</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              币种用于金额输入和成本折算。新增币种后会随定时刷新尝试获取报价；没有可用汇率时，需要先刷新汇率再创建订阅。
+            </p>
+          </div>
+          <Button onClick={() => setDialog({ mode: "add" })}>
+            <Plus className="size-4" />
+            新增币种
+          </Button>
+        </div>
+
+        <div className="mt-4 max-w-sm">
+          <Label htmlFor="currency-country-filter" className="mb-2">
+            国家/地区
+          </Label>
+          <Input
+            id="currency-country-filter"
+            value={countryQuery}
+            onChange={(event) => setCountryQuery(event.target.value)}
+            placeholder="筛选国家/地区"
+          />
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">
+          最小单位位数表示金额允许的小数位数，以币种元数据为准。
+        </p>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
+      <table data-slot="table" className="w-full min-w-[720px] table-fixed caption-bottom text-sm">
+        <colgroup>
+          <col className="w-[26%]" />
+          <col className="w-[11%]" />
+          <col className="w-[10%]" />
+          <col />
+          <col className="w-[14%]" />
+          <col className="w-32" />
+        </colgroup>
+        <TableHeader className="sticky top-0 z-20 bg-background shadow-sm [&_th]:bg-background">
+          <TableRow>
+            <TableHead scope="col">国家/地区</TableHead>
+            <TableHead scope="col">代码</TableHead>
+            <TableHead scope="col">符号</TableHead>
+            <TableHead scope="col">名称</TableHead>
+            <TableHead scope="col" className="text-right">
+              最小单位位数
+            </TableHead>
+            <TableHead scope="col" className="text-right">
+              操作
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filteredCurrencies.map((row) => (
+            <TableRow key={row.code}>
+              <TableCell>{row.countryName}</TableCell>
+              <TableCell className="font-mono">{row.code}</TableCell>
+              <TableCell className="font-mono">{row.symbol}</TableCell>
+              <TableCell>{row.name}</TableCell>
+              <TableCell className="text-right font-mono">
+                {row.minorUnit}
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11"
+                        aria-label={`编辑 ${row.code}`}
+                        onClick={() => setDialog({ mode: "edit", currency: row })}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>编辑</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-11"
+                        aria-label={`删除 ${row.code}`}
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>删除</TooltipContent>
+                  </Tooltip>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+          {filteredCurrencies.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={6}
+                className="py-8 text-center text-sm text-muted-foreground"
+              >
+                没有匹配的国家/地区
+              </TableCell>
+            </TableRow>
+          ) : null}
+        </TableBody>
+      </table>
+      </div>
+
+      <CurrencyDialog
+        open={dialog !== null}
+        mode={dialog?.mode ?? "add"}
+        currency={dialog?.mode === "edit" ? dialog.currency : undefined}
+        rateCurrencies={rateCurrencies}
+        existingCodes={existingCodes}
+        onOpenChange={(open) => {
+          if (!open) setDialog(null);
+        }}
+      />
+      <CurrencyDeleteDialog
+        currency={deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      />
+    </div>
+  );
+}

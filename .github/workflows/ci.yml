@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  CI: 'true'
+
+jobs:
+  verify:
+    name: Check application
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Static checks
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Build application
+        run: npm run build
+
+  desktop:
+    name: Build Windows desktop
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - name: Install application dependencies
+        run: npm ci
+      - name: Install desktop dependencies
+        run: npm --prefix desktop ci
+      - name: Desktop tests
+        run: npm run desktop:test
+      - name: Package Windows application
+        run: npm run desktop:package
+      - name: Smoke test bundled service and persistence
+        run: npm run desktop:smoke
+      - name: Smoke test packaged application
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $version = (Get-Content -LiteralPath desktop/package.json -Raw | ConvertFrom-Json).version
+          $executablePath = Join-Path $env:GITHUB_WORKSPACE "desktop/dist/SubscriptionButler-$version-Windows-x64.exe"
+          if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+            throw 'Packaged executable was not produced.'
+          }
+          $smokeDirectory = Join-Path $env:RUNNER_TEMP ('subscription-butler-package-smoke-' + [guid]::NewGuid())
+          $env:SUBSCRIPTION_BUTLER_USER_DATA = $smokeDirectory
+          $smokeProcess = Start-Process -FilePath $executablePath -ArgumentList '--smoke-test' -WindowStyle Hidden -Wait -PassThru
+          if ($smokeProcess.ExitCode -ne 0) { throw 'Packaged application smoke test failed.' }
+          $resultPath = Join-Path $smokeDirectory 'smoke-result.json'
+          if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { throw 'Smoke result was not produced.' }
+          $smokeResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          if ($smokeResult.status -ne 'ok' -or $smokeResult.health -ne 'ok' -or $smokeResult.loginStatus -ne 200 -or $smokeResult.version -ne $version) {
+            throw 'Packaged application did not pass health, login and version checks.'
+          }
+          Write-Output "Packaged application smoke test passed for version $version."
+      - name: Save build for inspection
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: subscription-butler-windows-x64
+          path: |
+            desktop/dist/SubscriptionButler-*-Windows-x64.exe
+            LICENSE
+            NOTICE
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

@@ -1,0 +1,80 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# database (SQLite file lives on a persistent disk, never committed)
+/data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# desktop shell
+/desktop/node_modules/
+/desktop/dist/
+/desktop/runtime/
+/desktop/runtime-tests/
+/release/
+/tmp/
+/.smoke-data/
+/test-artifacts/
+/work/
+/desktop/desktop-config.json
+/desktop/*.log
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next-dev.stdout.log
+.next-dev.stderr.log
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# local Codex workspace state
+.codex/
+
+# graphify: keep the navigable graph, ignore caches/backups/intermediates
+graphify-out/*
+!graphify-out/graph.json
+!graphify-out/graph.html
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/manifest.json
+!graphify-out/.graphify_labels.json
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

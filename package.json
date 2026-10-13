@@ -1,0 +1,75 @@
+{
+  "name": "subscription-butler",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "24.18.x"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "node scripts/build-app.cjs",
+    "start": "next start",
+    "lint": "eslint",
+    "desktop:dev": "npm --prefix desktop start",
+    "desktop:build": "npm --prefix desktop run dist",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:seed": "tsx src/db/seed.ts",
+    "test": "vitest run",
+    "desktop:prepare": "node scripts/prepare-desktop.cjs",
+    "desktop:package": "npm run build && npm run desktop:prepare && npm --prefix desktop run dist",
+    "desktop:test": "node --test desktop/tests/*.test.cjs",
+    "desktop:smoke": "node scripts/smoke-runtime.cjs"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "better-sqlite3": "^12.11.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.21.0",
+    "next": "16.3.0",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^9.0.3",
+    "qrcode": "^1.5.4",
+    "radix-ui": "^1.6.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-hook-form": "^7.80.0",
+    "shadcn": "^4.12.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.22.4",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  },
+  "description": "订阅管家：本地订阅、拼车成员与收支管理",
+  "license": "Apache-2.0",
+  "repository": {
+    "url": "https://github.com/Ararataki-number-one/subscription-butler.git",
+    "type": "git"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.28.1": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

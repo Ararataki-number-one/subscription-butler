@@ -1,0 +1,79 @@
+{
+  "name": "subscription-butler-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "订阅管家 Windows 桌面软件",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "43.1.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.ararataki.subscriptionbutler",
+    "productName": "订阅管家",
+    "asar": true,
+    "files": [
+      "main.js",
+      "preload.js",
+      "runtime.js",
+      "setup.html",
+      "setup.css",
+      "setup.js",
+      "setup-preload.js",
+      "assets/icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../NOTICE",
+        "to": "NOTICE"
+      },
+      {
+        "from": "runtime/node_modules",
+        "to": "runtime/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "SubscriptionButler-${version}-Windows-x64.exe"
+    },
+    "afterPack": "after-pack.cjs"
+  },
+  "author": {
+    "name": "XiaoxiaoZ",
+    "url": "https://github.com/Ararataki-number-one"
+  },
+  "license": "Apache-2.0"
+}

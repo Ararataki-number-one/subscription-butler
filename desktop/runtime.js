@@ -1,0 +1,227 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const http = require("node:http");
+const net = require("node:net");
+const path = require("node:path");
+const { spawn } = require("node:child_process");
+
+const CONFIG_VERSION = 1;
+const LOCAL_HOST = "127.0.0.1";
+
+function validateLoginKey(value) {
+  if (typeof value !== "string" || value.length < 8 || value.length > 256 ||
+      !value.trim() || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new Error("登录密钥需为 8 至 256 个字符，不能包含换行或控制字符。");
+  }
+  return value;
+}
+
+function validateConfig(value) {
+  if (value?.version !== CONFIG_VERSION ||
+      typeof value.authSecret !== "string" ||
+      value.authSecret.length < 32 || value.authSecret.length > 256 ||
+      /[\u0000-\u001f\u007f]/u.test(value.authSecret) ||
+      !/^[a-f0-9]{64}$/u.test(value.loginKeyHash || "")) {
+    throw new Error("本地登录配置损坏，请保留数据目录并检查 config.json。");
+  }
+  return value;
+}
+
+function writeAtomic(filePath, contents) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporaryPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, contents, { mode: 0o600, flag: "wx" });
+    fs.renameSync(temporaryPath, filePath);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}
+
+function loadConfig(userDataDirectory) {
+  const filePath = path.join(userDataDirectory, "config.json");
+  if (!fs.existsSync(filePath)) return null;
+  let value;
+  try {
+    value = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    throw new Error("本地登录配置无法读取，请保留数据目录并检查 config.json。");
+  }
+  return validateConfig(value);
+}
+
+function createConfig(userDataDirectory, loginKey) {
+  validateLoginKey(loginKey);
+  if (fs.existsSync(path.join(userDataDirectory, "config.json"))) {
+    throw new Error("已设置登录密钥，不能覆盖现有登录配置。");
+  }
+  const config = {
+    version: CONFIG_VERSION,
+    authSecret: crypto.randomBytes(32).toString("hex"),
+    loginKeyHash: crypto.createHash("sha256").update(loginKey, "utf8").digest("hex"),
+  };
+  writeAtomic(path.join(userDataDirectory, "config.json"), `${JSON.stringify(config, null, 2)}\n`);
+  writeEnvironmentFile(userDataDirectory, config);
+  return config;
+}
+
+function writeEnvironmentFile(userDataDirectory, config) {
+  validateConfig(config);
+  // This generated file remains in the private data directory. The launcher
+  // supplies the same values directly to Node; it never reads a source .env.
+  const databasePath = path.join(userDataDirectory, "data", "app.db").replaceAll("\\", "/");
+  const lines = [
+    `APP_AUTH_SECRET=${config.authSecret}`,
+    `APP_LOGIN_KEY_HASH=${config.loginKeyHash}`,
+    "APP_MFA_ISSUER=订阅管家",
+    "APP_ALLOW_INSECURE_COOKIES=true",
+    `DB_FILE_NAME=${JSON.stringify(databasePath)}`,
+  ];
+  writeAtomic(path.join(userDataDirectory, ".env"), `${lines.join("\n")}\n`);
+  fs.mkdirSync(path.join(userDataDirectory, "data"), { recursive: true });
+}
+
+function runtimePaths(runtimeDirectory, platform = process.platform) {
+  const value = {
+    directory: runtimeDirectory,
+    node: path.join(runtimeDirectory, platform === "win32" ? "node.exe" : "node"),
+    initialize: path.join(runtimeDirectory, "initialize.cjs"),
+    server: path.join(runtimeDirectory, "server.js"),
+  };
+  for (const filePath of [value.node, value.initialize, value.server]) {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`应用运行文件缺失：${path.basename(filePath)}。请重新下载完整版本。`);
+    }
+  }
+  return value;
+}
+
+function backendEnvironment(config, userDataDirectory, port, inherited = process.env) {
+  validateConfig(config);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("本地服务端口无效。");
+  }
+  const environment = { ...inherited };
+  // Do not inherit launcher/runtime overrides from a development shell.
+  delete environment.NODE_OPTIONS;
+  delete environment.ELECTRON_RUN_AS_NODE;
+  return {
+    ...environment,
+    NODE_ENV: "production",
+    HOSTNAME: LOCAL_HOST,
+    PORT: String(port),
+    DB_FILE_NAME: path.join(userDataDirectory, "data", "app.db"),
+    APP_AUTH_SECRET: config.authSecret,
+    APP_LOGIN_KEY_HASH: config.loginKeyHash,
+    APP_MFA_ISSUER: "订阅管家",
+    APP_ALLOW_INSECURE_COOKIES: "true",
+    TZ: "Asia/Shanghai",
+    NEXT_TELEMETRY_DISABLED: "1",
+  };
+}
+
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, LOCAL_HOST, () => {
+      const port = server.address().port;
+      server.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
+}
+
+function trustedLocalUrl(target, port) {
+  try {
+    const url = new URL(target);
+    return url.protocol === "http:" && url.hostname === LOCAL_HOST &&
+      url.port === String(port) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function externalWebUrl(target) {
+  try {
+    const url = new URL(target);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function requestHealth(port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const request = http.get({ hostname: LOCAL_HOST, port, path: "/api/health" }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 16384) request.destroy();
+      });
+      response.on("error", () => resolve(false));
+      response.on("end", () => {
+        try {
+          resolve(response.statusCode === 200 && JSON.parse(body).status === "ok");
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    request.setTimeout(timeoutMs, () => request.destroy());
+    request.on("error", () => resolve(false));
+  });
+}
+
+function runInitializer(runtime, env, onLog = () => {}, timeoutMs = 60000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(runtime.node, [runtime.initialize], {
+      cwd: runtime.directory, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.on("data", (chunk) => onLog("server.log", chunk));
+    child.stderr.on("data", (chunk) => onLog("server-error.log", chunk));
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("本地数据库初始化超时，请查看应用日志。"));
+    }, timeoutMs);
+    child.once("error", (error) => { clearTimeout(timer); reject(error); });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`本地数据库初始化失败（退出码 ${code}），请查看应用日志。`));
+    });
+  });
+}
+
+async function launchBackend(runtime, env, onLog = () => {}, options = {}) {
+  const child = spawn(runtime.node, [runtime.server], {
+    cwd: runtime.directory, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+  });
+  options.onSpawn?.(child);
+  child.stdout.on("data", (chunk) => onLog("server.log", chunk));
+  child.stderr.on("data", (chunk) => onLog("server-error.log", chunk));
+  let failure;
+  child.once("error", (error) => { failure = error; });
+  child.once("exit", (code, signal) => {
+    failure = new Error(`本地数据服务已退出（${signal || code}）。`);
+  });
+  const deadline = Date.now() + (options.timeoutMs ?? 30000);
+  const intervalMs = options.intervalMs ?? 250;
+  while (Date.now() < deadline) {
+    if (failure) throw failure;
+    if (await requestHealth(Number(env.PORT))) {
+      if (failure) throw failure;
+      return child;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  child.kill();
+  throw new Error("本地服务启动超时，请查看应用日志。");
+}
+
+module.exports = {
+  LOCAL_HOST, backendEnvironment, createConfig, externalWebUrl, findFreePort,
+  launchBackend, loadConfig, requestHealth, runInitializer, runtimePaths,
+  trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
+};

@@ -1,0 +1,88 @@
+// Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
+import { desc, eq } from "drizzle-orm";
+import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import { currency, fxRate } from "./schema";
+import type { CnyDisplayRate } from "@/lib/money-display";
+
+/**
+ * FX-01 — parameterized exchange-rate cache access (T-02-01 / T-02-04).
+ *
+ * Pure data helpers that take an explicit `db` so they run against both the
+ * production singleton and the in-memory test harness (never import the `@/db`
+ * singleton here). Writes go through `upsertRates`, which wraps every row in a
+ * single `db.transaction` + `onConflictDoUpdate` so the cache is updated
+ * all-or-nothing — a partial/0/NULL row set is never persisted (Pitfall 1).
+ * Rates are X→USD decimal STRINGS (D-02); USD is pinned to "1" by the caller
+ * (D-03). Every query uses Drizzle parameterized builders — never string SQL.
+ */
+type Db = BetterSQLite3Database<Record<string, unknown>>;
+
+export type FxRateRow = typeof fxRate.$inferSelect;
+export type FxRateInsert = typeof fxRate.$inferInsert;
+export type FxRateListRow = {
+  rate: FxRateRow;
+  currency: typeof currency.$inferSelect;
+};
+
+/** All cached rates, ordered by currency code. */
+export function listRates(db: Db): FxRateListRow[] {
+  return db
+    .select({
+      rate: fxRate,
+      currency,
+    })
+    .from(fxRate)
+    .innerJoin(currency, eq(currency.code, fxRate.currencyCode))
+    .orderBy(fxRate.currencyCode)
+    .all();
+}
+
+/** Read one currency's cached X->USD rate for the freeze pipeline. */
+export function getRate(db: Db, currencyCode: string): FxRateRow | undefined {
+  return db
+    .select()
+    .from(fxRate)
+    .where(eq(fxRate.currencyCode, currencyCode))
+    .get();
+}
+
+export function getCnyDisplayRate(db: Db): CnyDisplayRate | null {
+  return db.select({ minorUnit: currency.minorUnit, rateToUsd: fxRate.rateToUsd })
+    .from(fxRate).innerJoin(currency, eq(currency.code, fxRate.currencyCode))
+    .where(eq(fxRate.currencyCode, "CNY")).get() ?? null;
+}
+
+/** Latest `fetched_at` across all rows, or null on an empty table (D-05/D-07). */
+export function getMostRecentFetchedAt(db: Db): string | null {
+  const row = db
+    .select({ fetchedAt: fxRate.fetchedAt })
+    .from(fxRate)
+    .orderBy(desc(fxRate.fetchedAt))
+    .limit(1)
+    .get();
+  return row?.fetchedAt ?? null;
+}
+
+/**
+ * Atomic upsert of a rate set. All rows are written inside one transaction so
+ * the cache is never left partially updated (Pitfall 1). Re-running with an
+ * existing `currencyCode` updates that row in place via the PK conflict path.
+ */
+export function upsertRates(db: Db, rows: FxRateInsert[]): void {
+  db.transaction((tx) => {
+    for (const r of rows) {
+      tx.insert(fxRate)
+        .values(r)
+        .onConflictDoUpdate({
+          target: fxRate.currencyCode,
+          set: {
+            rateToUsd: r.rateToUsd,
+            fetchedAt: r.fetchedAt,
+            quoteDate: r.quoteDate ?? null,
+            source: r.source ?? "frankfurter",
+          },
+        })
+        .run();
+    }
+  });
+}

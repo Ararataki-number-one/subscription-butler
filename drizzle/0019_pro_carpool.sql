@@ -1,0 +1,1 @@
+ALTER TABLE `space` ADD `sharing_mode` text DEFAULT 'single' NOT NULL;

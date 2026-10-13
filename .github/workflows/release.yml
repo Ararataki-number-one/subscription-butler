@@ -1,0 +1,132 @@
+name: Release Windows desktop
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: '1'
+  CI: 'true'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Validate version and release notes
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $desktopVersion = (Get-Content -LiteralPath desktop/package.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw 'Application version must be a semantic version.'
+          }
+          if ($env:GITHUB_REF_NAME -ne "v$version" -or $desktopVersion -ne $version) {
+            throw 'Tag, application version and desktop version must match.'
+          }
+          if (-not (Test-Path -LiteralPath "docs/releases/v$version.md")) {
+            throw 'Version-specific release notes are required.'
+          }
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.0'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+      - name: Install application dependencies
+        run: npm ci
+      - name: Install desktop dependencies
+        run: npm --prefix desktop ci
+      - name: Static checks
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Desktop tests
+        run: npm run desktop:test
+      - name: Package Windows application
+        run: npm run desktop:package
+      - name: Smoke test bundled service and persistence
+        run: npm run desktop:smoke
+      - name: Smoke test packaged application
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $executablePath = Join-Path $env:GITHUB_WORKSPACE "desktop/dist/SubscriptionButler-$env:RELEASE_VERSION-Windows-x64.exe"
+          if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+            throw 'Packaged executable was not produced.'
+          }
+          $smokeDirectory = Join-Path $env:RUNNER_TEMP ('subscription-butler-release-smoke-' + [guid]::NewGuid())
+          $env:SUBSCRIPTION_BUTLER_USER_DATA = $smokeDirectory
+          $smokeProcess = Start-Process -FilePath $executablePath -ArgumentList '--smoke-test' -WindowStyle Hidden -Wait -PassThru
+          if ($smokeProcess.ExitCode -ne 0) { throw 'Packaged application smoke test failed.' }
+          $resultPath = Join-Path $smokeDirectory 'smoke-result.json'
+          if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { throw 'Smoke result was not produced.' }
+          $smokeResult = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          if ($smokeResult.status -ne 'ok' -or $smokeResult.health -ne 'ok' -or $smokeResult.loginStatus -ne 200 -or $smokeResult.version -ne $env:RELEASE_VERSION) {
+            throw 'Packaged application did not pass health, login and version checks.'
+          }
+          Write-Output "Packaged application smoke test passed for version $env:RELEASE_VERSION."
+      - name: Prepare release assets and checksums
+        shell: pwsh
+        run: |
+          $executable = "SubscriptionButler-$env:RELEASE_VERSION-Windows-x64.exe"
+          $executablePath = Join-Path 'desktop/dist' $executable
+          if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+            throw "Expected release executable was not produced: $executable"
+          }
+          New-Item -ItemType Directory -Path release-artifacts -Force | Out-Null
+          Copy-Item -LiteralPath $executablePath -Destination release-artifacts
+          Copy-Item -LiteralPath LICENSE, NOTICE -Destination release-artifacts
+          $checksumLines = foreach ($filename in @($executable, 'LICENSE', 'NOTICE')) {
+            $assetPath = Join-Path 'release-artifacts' $filename
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $assetPath).Hash.ToLowerInvariant()
+            "$hash  $filename"
+          }
+          $checksumLines | Set-Content -LiteralPath 'release-artifacts/SHA256SUMS.txt' -Encoding utf8NoBOM
+      - name: Save release assets
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: subscription-butler-${{ env.RELEASE_VERSION }}-windows-x64
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $existingReleaseJson = & gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existingRelease = $existingReleaseJson | ConvertFrom-Json
+            if ($existingRelease.tagName -ne $env:GITHUB_REF_NAME) { throw 'Existing release tag did not match.' }
+            Write-Output "Release $env:GITHUB_REF_NAME already exists; preserving its verified assets and notes."
+            exit 0
+          }
+          $releaseArguments = @(
+            'release', 'create', $env:GITHUB_REF_NAME,
+            "release-artifacts/SubscriptionButler-$env:RELEASE_VERSION-Windows-x64.exe",
+            'release-artifacts/SHA256SUMS.txt', 'release-artifacts/LICENSE', 'release-artifacts/NOTICE',
+            '--repo', $env:GITHUB_REPOSITORY,
+            '--verify-tag', '--title', "订阅管家 $env:GITHUB_REF_NAME",
+            '--notes-file', "docs/releases/$env:GITHUB_REF_NAME.md"
+          )
+          if ($env:RELEASE_VERSION.Contains('-')) {
+            $releaseArguments += '--prerelease'
+          }
+          & gh @releaseArguments
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub Release creation failed.' }

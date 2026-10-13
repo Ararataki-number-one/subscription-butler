@@ -1,0 +1,16 @@
+订阅管家 / Subscription Butler
+
+This distribution includes software derived from Team Account Manager:
+https://github.com/Userchenentao5/team-account-manager
+
+Team Account Manager was released under the Apache License, Version 2.0.
+The original Apache license is retained in LICENSE. Existing copyright,
+attribution, and license notices in the source remain applicable.
+
+This adapted distribution includes changes to product branding, standalone
+Windows desktop packaging, account rental and carpool management, payment
+fee calculations, RMB-oriented displays, and current exchange-rate valuation.
+These modifications do not change the attribution of the upstream work.
+
+Geist Sans and Geist Mono font assets are distributed under the SIL Open Font
+License, Version 1.1. Their license is included in third-party/Geist-OFL.txt.
