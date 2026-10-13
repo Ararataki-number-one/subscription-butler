@@ -13,6 +13,12 @@ function window(){const value=new BrowserWindow({show:false,width:1200,height:90
 async function main(){
  const runtime=runtimePaths(path.join(root,"desktop/runtime")),userData=path.join(directory,"ledger"),config=createConfig(userData,"Synthetic-web-acceptance-key"),port=await findFreePort(),env=backendEnvironment(config,userData,port),base="http://127.0.0.1:"+port;
  await runInitializer(runtime,env);
+ // The UI test owns its FX fixture. A network-capable CI runner must not replace
+ // the synthetic quote with a live provider quote during the startup scheduler.
+ // Scope this preload to this generated ledger; never inject it into the app.
+ const preload=path.join(directory,"synthetic-network.cjs"),networkLog=path.join(directory,"blocked-upstream.jsonl");
+ fs.writeFileSync(preload,`if(process.env.DB_FILE_NAME!==${JSON.stringify(env.DB_FILE_NAME)})throw new Error('Synthetic ledger boundary mismatch');const fs=require('node:fs'),original=globalThis.fetch;globalThis.fetch=async(input,...rest)=>{const url=new URL(typeof input==='string'||input instanceof URL?input:input.url);if(!['127.0.0.1','localhost'].includes(url.hostname)){fs.appendFileSync(${JSON.stringify(networkLog)},JSON.stringify({blockedHost:url.hostname})+'\\n');throw new TypeError('Synthetic upstream is offline');}return original(input,...rest);};`);
+ env.NODE_OPTIONS="--require "+JSON.stringify(preload.replaceAll("\\","/"));
  function quote(rate){const result=spawnSync(runtime.node,["-e",`const D=require('better-sqlite3');const d=new D(process.env.DB_FILE_NAME);const q=d.prepare('INSERT INTO fx_rate(currency_code,rate_to_usd,quote_date,source,fetched_at) VALUES(?,?,?,?,?) ON CONFLICT(currency_code) DO UPDATE SET rate_to_usd=excluded.rate_to_usd,quote_date=excluded.quote_date,source=excluded.source,fetched_at=excluded.fetched_at');q.run('USD','1','2026-10-13','synthetic',new Date().toISOString());q.run('CNY',${JSON.stringify(rate)},'2026-10-13','synthetic',new Date().toISOString());d.close();`],{cwd:runtime.directory,env,windowsHide:true,encoding:"utf8"});if(result.status!==0)throw new Error("Synthetic FX setup failed");}
  quote("0.14");child=await launchBackend(runtime,env);
  const ownerCookie="tam_session="+createLocalOwnerSession(config.authSecret).value;
@@ -48,6 +54,7 @@ async function main(){
  const b=window();await b.loadURL(base+"/workspace").catch(()=>{});await wait(b,()=>!!document.querySelector("input[type=password]"),"cold-tab requires credentials");a.destroy();
  const cold=await evaluate(b,()=>({privateVisible:document.body.textContent.includes("Synthetic private customer"),marker:sessionStorage.getItem("ops-authenticated-cache-session"),token:sessionStorage.getItem("ops-token"),persistentActor:localStorage.getItem("ops-actor")}));
  assert.equal(cold.privateVisible,false);assert.equal(cold.marker,null);assert.equal(cold.token,null);assert(cold.persistentActor);checks.push("cold-offline-tab-cannot-read-another-session-cache");
- const summary={status:"ok",visibleWindow:false,checks};fs.writeFileSync(path.join(directory,"result.json"),JSON.stringify(summary,null,2));process.stdout.write(JSON.stringify(summary)+"\n");
+ assert(fs.readFileSync(networkLog,"utf8").includes('api.frankfurter.dev'),"Startup FX requests must stay inside the synthetic fixture boundary");
+ const summary={status:"ok",visibleWindow:false,externalRequestsBlocked:true,checks};fs.writeFileSync(path.join(directory,"result.json"),JSON.stringify(summary,null,2));process.stdout.write(JSON.stringify(summary)+"\n");
 }
 app.whenReady().then(async()=>{let code=0;try{await main();}catch(error){const failure={status:"failed",checks,error:String(error.message).slice(0,500)};fs.writeFileSync(path.join(directory,"result.json"),JSON.stringify(failure,null,2));process.stderr.write(failure.error+"\n");code=1;}finally{process.stdout.write(JSON.stringify({resultFile:path.join(directory,"result.json"),status:code===0?"ok":"failed"})+"\n");session.defaultSession.disableNetworkEmulation();for(const value of windows)if(!value.isDestroyed())value.destroy();if(child)await stopBackendAndCloseConnections(child,c=>c.kill(),async()=>{}).catch(()=>{});app.exit(code);}});

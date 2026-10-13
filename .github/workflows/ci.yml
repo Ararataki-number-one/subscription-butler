@@ -109,6 +109,13 @@ jobs:
               }
             }
             if ($workspaceUiResultPath -and (Test-Path -LiteralPath $workspaceUiResultPath -PathType Leaf)) { Get-Content -LiteralPath $workspaceUiResultPath -Raw | Write-Output }
+            if ($workspaceUiResultPath) {
+              $workspaceUiDiagnosticPath = Join-Path (Split-Path -Parent $workspaceUiResultPath) 'diagnostic.json'
+              if (Test-Path -LiteralPath $workspaceUiDiagnosticPath -PathType Leaf) {
+                Write-Output "Acceptance diagnostic: $workspaceUiDiagnosticPath"
+                Get-Content -LiteralPath $workspaceUiDiagnosticPath -Raw | Write-Output
+              }
+            }
             throw
           }
       - name: Smoke test packaged application
