@@ -5,7 +5,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   Boxes,
   Database,
   CreditCard,
@@ -14,6 +13,8 @@ import {
   Settings,
   LogOut,
   Layers3,
+  CalendarDays,
+  Users,
 } from "lucide-react";
 
 import { logout } from "@/actions/auth";
@@ -35,9 +36,9 @@ import {
 } from "@/components/ui/sidebar";
 
 const topLevel = [
-  { label: "今日工作台", href: "/workspace", icon: LayoutDashboard },
-  { label: "仪表盘", href: "/", icon: LayoutDashboard },
+  { label: "续费日历", href: "/", icon: CalendarDays },
   { label: "订阅", href: "/spaces", icon: Boxes },
+  { label: "客户", href: "/customers", icon: Users },
   { label: "设置", href: "/settings", icon: Settings },
 ] as const;
 

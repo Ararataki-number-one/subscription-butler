@@ -168,7 +168,7 @@ async function startBackend() {
   const ownerCookie = await authorizeLocalDesktop();
   await ensureLocalWorkspaceReady(port, ownerCookie);
   backendReady = true;
-  if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(appUrl("/workspace"));
+  if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(appUrl("/"));
 }
 async function authorizeLocalDesktop() {
   const ownerSession = createLocalOwnerSession(config.authSecret);
@@ -182,7 +182,7 @@ async function enterLocalWorkspace() {
     await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: "sessionStorage.removeItem('ops-token'); sessionStorage.removeItem('ops-actor'); sessionStorage.removeItem('ops-role'); localStorage.removeItem('ops-actor');" }]);
   }
   await authorizeLocalDesktop();
-  await mainWindow.loadURL(appUrl("/workspace")); showMainWindow();
+  await mainWindow.loadURL(appUrl("/")); showMainWindow();
 }
 
 function setupMaintenance() {
@@ -206,7 +206,7 @@ function setupMaintenance() {
       const timer = setTimeout(() => resolve(false), 5000);
       notification.once("show", () => { clearTimeout(timer); resolve(true); });
       notification.once("failed", () => { clearTimeout(timer); resolve(false); });
-      notification.once("click", () => { showMainWindow(); void mainWindow?.loadURL(appUrl("/workspace")); });
+      notification.once("click", () => { showMainWindow(); void mainWindow?.loadURL(appUrl("/")); });
       notification.show();
     }),
   });
@@ -265,7 +265,7 @@ async function restoreSelected(file) {
   return { cancelled: false, restoredAt: new Date().toISOString() };
 }
 async function inspectBrowserQueue() {
-  if (!mainWindow || !trustedLocalUrl(mainWindow.webContents.getURL(), port)) throw new Error("请先返回本地工作台，再检查未提交队列。");
+  if (!mainWindow || !trustedLocalUrl(mainWindow.webContents.getURL(), port)) throw new Error("请先返回本地页面，再检查未提交队列。");
   return mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: `(${readBrowserQueue.toString()})()` }]);
 }
 async function importSavedQueue() {
@@ -277,13 +277,13 @@ async function importSavedQueue() {
     if (choice.canceled || !choice.filePaths[0]) return;
     const rows = readQueue(choice.filePaths[0], new URL(appUrl()).origin, backupManager.unprotectKey);
     const answer = await dialog.showMessageBox(mainWindow, { type: "warning", title: "恢复未提交队列", message: `将 ${rows.length} 项操作重新放入当前管理员的待提交队列。`,
-      detail: "不会直接写入账本。返回工作台检查后再重试提交；服务端仍会核对权限、命令编号和记录版本，重复命令不会重复入账。", buttons: ["放入待提交队列", "取消"], defaultId: 1, cancelId: 1 });
+      detail: "不会直接写入账本。返回客户页面检查后再重试提交；服务端仍会核对权限、命令编号和记录版本，重复命令不会重复入账。", buttons: ["放入待提交队列", "取消"], defaultId: 1, cancelId: 1 });
     if (answer.response !== 0) return;
     const reassigned = rows.map(row => ({ ...row, actorId: actor.id }));
     const serialized = JSON.stringify(JSON.stringify(reassigned));
     await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: `(${writeBrowserQueue.toString()})(JSON.parse(${serialized}))` }]);
-    await mainWindow.loadURL(appUrl("/workspace"));
-    await dialog.showMessageBox(mainWindow, { type: "info", message: "队列已恢复，请在工作台检查后再提交。" });
+    await mainWindow.loadURL(appUrl("/customers"));
+    await dialog.showMessageBox(mainWindow, { type: "info", message: "队列已恢复，请在客户页面检查后再提交。" });
   });
 }
 async function requestRestore() {

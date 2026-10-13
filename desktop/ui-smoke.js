@@ -23,11 +23,11 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     if (window.isDestroyed()) throw new Error("Hidden UI window stopped unexpectedly");
     return window.webContents.executeJavaScript(`(${fn.toString()})(...JSON.parse(${JSON.stringify(JSON.stringify(args))}))`);
   }
-  async function waitFor(predicate, label, timeoutMs = 20000) {
+  async function waitFor(predicate, label, timeoutMs = 20000, args = []) {
     const until = Date.now() + timeoutMs;
     while (Date.now() < until) {
       if (errors.length) throw new Error(`UI console error during ${label}: ${errors[0]}`);
-      if (await evaluate(predicate)) return;
+      if (await evaluate(predicate, ...args)) return;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     const notice = await evaluate(() => document.querySelector(".notice.error,[role=alert]")?.textContent || "");
@@ -67,12 +67,41 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
       return (await response.json()).snapshot;
     });
   }
+  async function setInput(selector, value) {
+    await evaluate((target, next) => {
+      const input = document.querySelector(target);
+      if (!(input instanceof HTMLInputElement)) throw new Error(`UI input unavailable: ${target}`);
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, next);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }, selector, value);
+  }
   const suffix = crypto.randomUUID().slice(0, 8);
   const customerName = `UI Synthetic customer ${suffix}`, subscriptionName = `UI Synthetic subscription ${suffix}`;
+  const sidebarCustomerName = `UI Sidebar customer ${suffix}`;
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const dateOffset = days => new Date(Date.parse(today + "T00:00:00Z") + days * 86400000).toISOString().slice(0, 10);
   try {
     assert.ok(fs.existsSync(path.join(userData, "config.json")), "Native startup did not create private config");
     steps.push("first-run-private-config-auto-initialized");
+    if (!existingWindow) await window.loadURL(new URL("/", url).href);
+    assert.equal(new URL(window.webContents.getURL()).pathname, "/", "Native startup did not enter the classic calendar");
+    await waitFor(() => !!document.querySelector("[data-renewal-calendar]") && document.querySelector("h1")?.textContent === "续费日历", "native classic calendar");
+    assert.equal(await evaluate(() => !!document.querySelector('nav[aria-label="运营功能"]')), false, "Classic calendar exposed operations tabs");
+    const sidebarLinks = await evaluate(() => [...document.querySelectorAll('[data-sidebar="menu"] a[href]')].map(link => link.getAttribute("href")));
+    assert.ok(sidebarLinks.includes("/spaces"), "Classic subscription sidebar link missing");
+    assert.equal(sidebarLinks.indexOf("/customers"), sidebarLinks.indexOf("/spaces") + 1, "Customer sidebar link does not follow subscriptions");
+    assert.equal(sidebarLinks.includes("/workspace"), false, "Classic sidebar exposed the compatibility workspace");
+    steps.push("classic-calendar-startup-and-sidebar");
+    await window.loadURL(new URL("/customers", url).href);
+    await waitFor(() => document.querySelector("h1")?.textContent === "客户档案" && [...document.querySelectorAll("button")].some(button => button.textContent.trim() === "新增客户" && !button.disabled), "embedded customer page is authenticated");
+    assert.equal(await evaluate(() => !!document.querySelector('nav[aria-label="运营功能"]')), false, "Embedded customer page exposed operations tabs");
+    await click("新增客户");
+    await fill({ name: sidebarCustomerName, contact: "Synthetic sidebar contact" });
+    const sidebarCustomer = (await snapshot()).customers.find(row => row.data.name === sidebarCustomerName);
+    assert.ok(sidebarCustomer, "Embedded customer form did not create record");
+    assert.equal(sidebarCustomer.data.contact, "Synthetic sidebar contact");
+    steps.push("embedded-customer-page");
     await window.loadURL(new URL("/workspace", url).href);
     await waitFor(() => [...document.querySelectorAll("nav button")].some(button => button.textContent === "今日工作台"), "workspace is authenticated");
     const currentActor = await evaluate(async () => (await (await fetch("/api/operations/access", { cache: "no-store" })).json()).actor);
@@ -119,6 +148,62 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     await click("历史", "section.detail");
     await waitFor(() => document.body.textContent.includes("renew") && document.body.textContent.includes("join"), "rental lifecycle history");
     steps.push("customer-rental-history");
+    const calendarFixtures = [
+      { id: "subscription:" + crypto.randomUUID(), commandId: crypto.randomUUID(), name: `UI Near renewal ${suffix}`, account: "near@example.test", startDate: today, endDate: dateOffset(1) },
+      { id: "subscription:" + crypto.randomUUID(), commandId: crypto.randomUUID(), name: `UI Late renewal ${suffix}`, account: "late@example.test", startDate: dateOffset(-2), endDate: dateOffset(-1) },
+    ];
+    await evaluate(async fixtures => {
+      for (const fixture of fixtures) {
+        const response = await fetch("/api/operations/commands", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: fixture.commandId, type: "subscription.save", payload: { id: fixture.id, name: fixture.name, service: "Synthetic calendar service", account: fixture.account,
+            currency: "USD", amountMinor: 100, feePercent: "0", period: { unit: "day", count: 1 }, startDate: fixture.startDate, capacity: 1, allocation: "fixed" } }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(`Calendar fixture failed: ${response.status}`);
+        const saved = result.snapshot?.subscriptions.find(row => row.id === fixture.id);
+        if (!saved || saved.data.endDate !== fixture.endDate) throw new Error("Calendar day-period fixture has an incorrect due date");
+      }
+    }, calendarFixtures);
+    await window.loadURL(new URL("/", url).href);
+    await waitFor(() => !!document.querySelector("[data-renewal-calendar]") && document.querySelector("h1")?.textContent === "续费日历", "classic calendar includes new records");
+    assert.equal(await evaluate(() => !!document.querySelector('nav[aria-label="运营功能"]')), false);
+    assert.equal(await evaluate(() => document.querySelector('input[aria-label="日历月份"]').value), today.slice(0, 7));
+    // On a month boundary yesterday and tomorrow belong to different months.
+    // Check each real due-date month instead of inventing an in-month deadline.
+    for (const fixture of calendarFixtures) {
+      await setInput('input[aria-label="日历月份"]', fixture.endDate.slice(0, 7));
+      await waitFor((recordId, account, month) => document.querySelector('input[aria-label="日历月份"]').value === month &&
+        [...document.querySelectorAll("[data-calendar-entry]")].some(entry => entry.getAttribute("data-calendar-entry") === "subscription:" + recordId && entry.textContent.includes(account)),
+      "calendar shows actual account and due date", 20000, [fixture.id, fixture.account, fixture.endDate.slice(0, 7)]);
+    }
+    await click("本月");
+    await waitFor(month => document.querySelector('input[aria-label="日历月份"]').value === month, "calendar returns to current month", 20000, [today.slice(0, 7)]);
+    assert.equal(await evaluate(() => document.querySelector('table[aria-label="即将到期"]').textContent.includes("near@example.test")), true, "Upcoming list omitted tomorrow's account");
+    assert.equal(await evaluate(() => document.querySelector('table[aria-label="即将到期"]').textContent.includes("late@example.test")), false, "Upcoming list included an overdue account");
+    await evaluate(() => {
+      const details = document.querySelector('table[aria-label="已逾期"]').closest("details");
+      if (!details.open) details.querySelector("summary").click();
+    });
+    await waitFor(() => {
+      const table = document.querySelector('table[aria-label="已逾期"]');
+      return table.closest("details").open && table.getClientRects().length > 0 && table.textContent.includes("late@example.test");
+    }, "expanded overdue list shows yesterday's account");
+    assert.equal(await evaluate(() => document.querySelector('table[aria-label="已逾期"]').textContent.includes("near@example.test")), false, "Overdue list included a future account");
+    const near = calendarFixtures[0];
+    await setInput('input[aria-label="日历月份"]', near.endDate.slice(0, 7));
+    await setInput('input[aria-label="搜索续费账号"]', near.account);
+    await waitFor(recordId => {
+      const entries = [...document.querySelectorAll("[data-calendar-entry]")];
+      return entries.length === 1 && entries[0].getAttribute("data-calendar-entry") === "subscription:" + recordId && entries[0].textContent.includes("near@example.test");
+    }, "calendar account search filters all other events", 20000, [near.id]);
+    assert.equal(await evaluate(() => document.querySelector('table[aria-label="已逾期"]').textContent.includes("late@example.test")), false, "Risk lists ignored account search");
+    const nextMonth = new Date(near.endDate.slice(0, 7) + "-01T00:00:00Z"); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+    await evaluate(() => document.querySelector('button[aria-label="下一月"]').click());
+    await waitFor(month => document.querySelector('input[aria-label="日历月份"]').value === month, "next-month calendar control", 20000, [nextMonth.toISOString().slice(0, 7)]);
+    assert.equal(await evaluate(() => document.querySelectorAll("[data-calendar-entry]").length), 0, "Calendar kept the searched event in the wrong month");
+    await setInput('input[aria-label="搜索续费账号"]', "");
+    await click("本月");
+    await waitFor(month => document.querySelector('input[aria-label="日历月份"]').value === month, "calendar restores current month after search", 20000, [today.slice(0, 7)]);
+    steps.push("renewal-calendar-all-accounts-and-risk-list");
     closing = true; window.destroy(); await restartBackend();
     window = createHiddenWindow(); onWindow(window); closing = false; monitor(window);
     const workspaceUrl = new URL("/workspace", url).href;
@@ -133,6 +218,8 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     }
     await waitFor(() => [...document.querySelectorAll("nav button")].some(button => button.textContent === "今日工作台"), "workspace reload");
     data = await snapshot(); assert.ok(data.customers.some(row => row.id === customer.id)); assert.ok(data.entries.some(row => row.id === receipt.id));
+    assert.ok(data.customers.some(row => row.id === sidebarCustomer.id), "Embedded customer did not survive restart");
+    for (const fixture of calendarFixtures) assert.ok(data.subscriptions.some(row => row.id === fixture.id && row.data.account === fixture.account && row.data.endDate === fixture.endDate), "Calendar renewal fixture did not survive restart");
     const restartedActor = await evaluate(async () => (await (await fetch("/api/operations/access", { cache: "no-store" })).json()).actor);
     assert.equal(restartedActor.role, "admin");
     assert.equal(await evaluate(() => !!document.querySelector("input[name=key],#setup-form")), false);

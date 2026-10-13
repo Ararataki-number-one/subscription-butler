@@ -151,6 +151,9 @@ jobs:
           if ($uiProcess.ExitCode -ne 0) { throw 'Real desktop UI flow failed.' }
           $uiResult = Get-Content -LiteralPath (Join-Path $uiDirectory 'ui-smoke-result.json') -Raw | ConvertFrom-Json
           if ($uiResult.status -ne 'ok' -or $uiResult.visibleWindow -or $uiResult.consoleErrors.Count -ne 0) { throw 'No-key desktop UI checks failed.' }
+          foreach ($uiRequiredStep in @('classic-calendar-startup-and-sidebar', 'embedded-customer-page', 'renewal-calendar-all-accounts-and-risk-list')) {
+            if ($uiResult.steps -notcontains $uiRequiredStep) { throw "Required classic desktop UI check missing: $uiRequiredStep" }
+          }
           if ($uiResult.steps -notcontains 'backend-window-restart-owner-auto-entry-data-persistence') { throw 'Owner auto-entry or persistence check missing.' }
       - name: Save build for inspection
         if: github.event_name != 'pull_request'

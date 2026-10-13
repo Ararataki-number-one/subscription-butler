@@ -14,7 +14,7 @@ import { insertChannel } from "@/db/channels";
 import { insertSpaceWithMother } from "@/db/spaces";
 import { insertChildAccount } from "@/db/childAccounts";
 import SpaceDetailPage from "@/app/(protected)/spaces/[id]/page";
-import DashboardPage from "@/app/(protected)/page";
+import SpacesPage from "@/app/(protected)/spaces/page";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 describe("unified account and earnings pages", () => {
@@ -72,12 +72,13 @@ describe("unified account and earnings pages", () => {
     expect(html).toContain("新增拼车成员");
     expect(html).toContain("Alice"); expect(html).toContain("Bob");
     expect(html).not.toContain("母号席位");
-    const dashboard = renderToStaticMarkup(React.createElement(TooltipProvider, null, React.createElement(DashboardPage)));
-    expect(dashboard).toContain("Business 每月预计收益");
-    expect(dashboard).toContain("Pro 每月预计收益");
-    expect(dashboard).toContain("Pro 约定收入 / 月");
-    expect(dashboard).toContain("Pro 预计净收益 / 月");
-    expect(dashboard).not.toContain("codex");
+    const list = renderToStaticMarkup(React.createElement(TooltipProvider, null,
+      await SpacesPage({ searchParams: Promise.resolve({}) })));
+    expect(list).toContain("Business 金额汇总");
+    expect(list).toContain("Pro 金额汇总");
+    expect(list).toContain("约定收入 / 月");
+    expect(list).toContain("预计净收益 / 月");
+    expect(list).not.toContain("codex");
   });
   it("shows only members for legacy single-Pro records", async () => {
     const pro = account("pro20x", "single");
