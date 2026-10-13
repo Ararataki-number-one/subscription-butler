@@ -19,7 +19,7 @@ const globalForDb = globalThis as unknown as {
 
 const databaseFile = process.env.DB_FILE_NAME ?? "./data/app.db";
 if (databaseFile !== ":memory:") mkdirSync(dirname(databaseFile), { recursive: true });
-const sqlite =
+export const sqlite =
   globalForDb.sqlite ??
   new Database(databaseFile);
 

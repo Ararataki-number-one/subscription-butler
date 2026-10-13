@@ -1,6 +1,8 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -166,6 +168,7 @@ export async function createChildAccount(
   spaceId: number,
   input: unknown,
 ): Promise<ChildAccountActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedSpaceId = spaceIdSchema.safeParse({ id: spaceId });
   if (!parsedSpaceId.success) {
     return { ok: false, error: "无效的空间。" };
@@ -227,6 +230,7 @@ export async function updateChildAccount(
   id: number,
   input: unknown,
 ): Promise<ChildAccountActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = childAccountIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的子账号。" };
@@ -299,6 +303,7 @@ export async function updateChildAccount(
 export async function renewChildAccount(
   id: number,
 ): Promise<ChildAccountActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = childAccountIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的子账号。" };
@@ -330,6 +335,7 @@ export async function renewChildAccount(
 export async function deleteChildAccount(
   id: number,
 ): Promise<ChildAccountActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = childAccountIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的子账号。" };
@@ -350,6 +356,7 @@ export async function updateMotherSeat(
   spaceId: number,
   input: unknown,
 ): Promise<ChildAccountActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedSpaceId = spaceIdSchema.safeParse({ id: spaceId });
   if (!parsedSpaceId.success) {
     return { ok: false, error: "无效的空间。" };

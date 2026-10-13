@@ -1,38 +1,71 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, session } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, session, Tray, Notification, nativeImage } = require("electron");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
 const {
-  backendEnvironment, createConfig, externalWebUrl, findFreePort, launchBackend,
+  assertSmokeDirectory, backendEnvironment, createLocalOwnerSession, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
   loadConfig, runInitializer, runtimePaths, trustedLocalUrl, writeEnvironmentFile,
 } = require("./runtime.js");
+const { BackupManager, writeJsonAtomic } = require("./backups.js");
+const { maintenanceRunner, requireMaintenanceAdmin } = require("./maintenance.js");
+const { ReminderManager } = require("./reminders.js");
+const { readBrowserQueue, readQueue, saveQueue, validateQueue, writeBrowserQueue } = require("./offline-queue.js");
 
 const APP_NAME = "订阅管家";
 const APP_ID = "io.github.ararataki.subscriptionbutler";
 const RELEASES_URL = "https://github.com/Ararataki-number-one/subscription-butler/releases";
-const SETUP_URL = pathToFileURL(path.join(__dirname, "setup.html")).href;
 app.setName(APP_NAME);
 app.setPath("userData", path.join(app.getPath("appData"), APP_NAME));
-const smokeTest = process.argv.includes("--smoke-test");
+const maintenanceSmokeTest = process.argv.includes("--maintenance-smoke-test");
+const uiSmokeTest = process.argv.includes("--ui-smoke-test") || process.argv.includes("--first-run-smoke-test");
+const smokeTest = process.argv.includes("--smoke-test") || maintenanceSmokeTest || uiSmokeTest;
 if (smokeTest) {
-  const target = process.env.SUBSCRIPTION_BUTLER_USER_DATA ||
+  const requestedTarget = process.env.SUBSCRIPTION_BUTLER_USER_DATA ||
     fs.mkdtempSync(path.join(app.getPath("temp"), "subscription-butler-smoke-"));
-  if (path.resolve(target) === path.resolve(app.getPath("userData"))) {
-    throw new Error("冒烟测试必须使用独立数据目录。");
-  }
+  const target = assertSmokeDirectory(requestedTarget, app.getPath("userData"));
   fs.mkdirSync(target, { recursive: true });
   app.setPath("userData", target);
 }
 
 let config;
 let mainWindow;
-let setupWindow;
 let serverProcess;
 let port;
 let isQuitting = false;
+let backendReady = false;
+let maintenanceBusy = false;
+let runtime;
+let backupManager;
+let tray;
+let reminderManager;
+let reminderInterval;
+let preferences = { closeToTray: true, notifications: true, closeHintShown: false };
+
+function loadPreferences() {
+  const file = path.join(app.getPath("userData"), "desktop-preferences.json");
+  if (!fs.existsSync(file)) return;
+  try {
+    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    for (const key of Object.keys(preferences)) if (typeof value[key] === "boolean") preferences[key] = value[key];
+  } catch { /* Invalid preferences must not prevent access to the ledger. */ }
+}
+function setPreferences(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).some(key => !["closeToTray", "notifications"].includes(key) || typeof value[key] !== "boolean")) {
+    throw new Error("桌面偏好设置无效。");
+  }
+  Object.assign(preferences, value);
+  writeJsonAtomic(path.join(app.getPath("userData"), "desktop-preferences.json"), preferences);
+  installMenu(); installTrayMenu();
+  return { closeToTray: preferences.closeToTray, notifications: preferences.notifications };
+}
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show(); mainWindow.focus();
+}
 
 function appUrl(pathname = "/") {
   return `http://127.0.0.1:${port}${pathname}`;
@@ -49,19 +82,23 @@ function assertTrustedRenderer(event) {
     throw new Error("已拒绝非本地页面的凭据请求。");
   }
 }
+function assertCredentialRenderer(event) {
+  assertTrustedRenderer(event);
+  if (new URL(event.senderFrame.url).pathname !== "/login") throw new Error("已拒绝登录页之外的凭据请求。");
+}
 
 function installCredentialHandlers() {
   ipcMain.handle("credentials:is-available", (event) => {
-    assertTrustedRenderer(event);
+    assertCredentialRenderer(event);
     return safeStorage.isEncryptionAvailable();
   });
   ipcMain.handle("credentials:load", (event) => {
-    assertTrustedRenderer(event);
+    assertCredentialRenderer(event);
     if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(credentialsPath())) return null;
     return safeStorage.decryptString(fs.readFileSync(credentialsPath()));
   });
   ipcMain.handle("credentials:save", (event, loginKey) => {
-    assertTrustedRenderer(event);
+    assertCredentialRenderer(event);
     if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows 安全存储当前不可用。");
     if (typeof loginKey !== "string" || !loginKey || loginKey.length > 4096) {
       throw new Error("登录密钥格式无效。");
@@ -73,7 +110,7 @@ function installCredentialHandlers() {
     fs.renameSync(temporaryPath, filePath);
   });
   ipcMain.handle("credentials:clear", (event) => {
-    assertTrustedRenderer(event);
+    assertCredentialRenderer(event);
     fs.rmSync(credentialsPath(), { force: true });
   });
 }
@@ -93,15 +130,218 @@ function appendServerLog(name, chunk) {
   fs.appendFileSync(logFile, text, { mode: 0o600 });
 }
 
-function stopOwnedServer() {
-  if (!serverProcess || serverProcess.killed || serverProcess.exitCode !== null) return;
+function terminateProcess(child) {
+  if (!child || child.killed || child.exitCode !== null || child.signalCode !== null || !child.pid) return;
   if (process.platform === "win32") {
-    spawnSync("taskkill.exe", ["/pid", String(serverProcess.pid), "/t", "/f"], {
+    const result = spawnSync("taskkill.exe", ["/pid", String(child.pid), "/t", "/f"], {
       windowsHide: true, stdio: "ignore", timeout: 10000,
     });
+    if (result.status !== 0) child.kill();
   } else {
-    serverProcess.kill("SIGTERM");
+    child.kill("SIGTERM");
   }
+}
+function stopOwnedServer() { terminateProcess(serverProcess); }
+async function stopBackend() {
+  backendReady = false;
+  const child = serverProcess; serverProcess = undefined;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("本地服务停止超时，原数据尚未替换。")), 10000);
+    child.once("exit", () => { clearTimeout(timer); resolve(); });
+    terminateProcess(child);
+  });
+}
+async function startBackend() {
+  config = loadConfig(app.getPath("userData"));
+  writeEnvironmentFile(app.getPath("userData"), config);
+  const environment = backendEnvironment(config, app.getPath("userData"), port);
+  await runInitializer(runtime, environment, appendServerLog);
+  const child = await launchBackend(runtime, environment, appendServerLog, { onSpawn: value => { serverProcess = value; } });
+  child.once("exit", (code, signal) => {
+    if (serverProcess === child && !isQuitting) {
+      backendReady = false;
+      appendServerLog("desktop.log", `${new Date().toISOString()} BACKEND_EXIT ${signal || code}\n`);
+      dialog.showErrorBox(`${APP_NAME} 服务已停止`, "本地数据服务意外停止，请重新打开程序。数据仍保存在本地数据目录。");
+      app.quit();
+    }
+  });
+  backendReady = true;
+  await authorizeLocalDesktop();
+  if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(appUrl("/workspace"));
+}
+async function authorizeLocalDesktop() {
+  const ownerSession = createLocalOwnerSession(config.authSecret);
+  await session.defaultSession.cookies.set({ url: appUrl(), name: "tam_session", value: ownerSession.value,
+    path: "/", httpOnly: true, sameSite: "lax", secure: false, expirationDate: Math.floor(ownerSession.expiresAt / 1000) });
+}
+async function enterLocalWorkspace() {
+  if (!backendReady || maintenanceBusy) throw new Error("本地服务尚未准备好，请稍后重试。");
+  if (mainWindow && trustedLocalUrl(mainWindow.webContents.getURL(), port)) {
+    await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: "sessionStorage.removeItem('ops-token'); sessionStorage.removeItem('ops-actor'); sessionStorage.removeItem('ops-role'); localStorage.removeItem('ops-actor');" }]);
+  }
+  await authorizeLocalDesktop();
+  await mainWindow.loadURL(appUrl("/workspace")); showMainWindow();
+}
+
+function setupMaintenance() {
+  const environment = backendEnvironment(config, app.getPath("userData"), port);
+  const operations = maintenanceRunner(runtime, environment);
+  backupManager = new BackupManager({ userData: app.getPath("userData"), appVersion: app.getVersion(), ...operations,
+    protectKey: value => {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows 安全存储不可用，无法创建敏感资料备份。");
+      return safeStorage.encryptString(value);
+    },
+    unprotectKey: value => {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("Windows 安全存储不可用。");
+      return safeStorage.decryptString(value);
+    },
+  });
+  reminderManager = new ReminderManager({ userData: app.getPath("userData"), fetchReminders: operations.reminders,
+    enabled: () => preferences.notifications && backendReady && !maintenanceBusy && !isQuitting,
+    notify: details => new Promise(resolve => {
+      if (!Notification.isSupported()) return resolve(false);
+      const notification = new Notification(details);
+      const timer = setTimeout(() => resolve(false), 5000);
+      notification.once("show", () => { clearTimeout(timer); resolve(true); });
+      notification.once("failed", () => { clearTimeout(timer); resolve(false); });
+      notification.once("click", () => { showMainWindow(); void mainWindow?.loadURL(appUrl("/workspace")); });
+      notification.show();
+    }),
+  });
+}
+function checkReminders() {
+  if (reminderManager) void reminderManager.check().catch(() => appendServerLog("desktop.log", `${new Date().toISOString()} REMINDER_CHECK_FAILED\n`));
+}
+async function exclusiveMaintenance(action) {
+  if (maintenanceBusy || !backendReady) throw new Error("本地维护正在运行，请稍后重试。");
+  maintenanceBusy = true; installMenu(); installTrayMenu();
+  try { return await action(); }
+  finally { maintenanceBusy = false; installMenu(); installTrayMenu(); }
+}
+async function requestBackup() {
+  return exclusiveMaintenance(async () => {
+    const answer = await dialog.showMessageBox(mainWindow, { type: "info", title: "创建本机加密备份", buttons: ["选择保存位置", "取消"], defaultId: 0, cancelId: 1,
+      message: "备份包括完整账本、登录配置、MFA 与邮件设置。",
+      detail: "备份经过 Windows 安全存储加密，只能由这台电脑上的当前 Windows 用户恢复。请保存在自己的本机磁盘，勿将私账提交到 GitHub。" });
+    if (answer.response !== 0) return { cancelled: true };
+    const result = await dialog.showSaveDialog(mainWindow, { title: "保存订阅管家加密备份", defaultPath: `SubscriptionButler-${new Date().toISOString().slice(0, 10)}.sbbackup`,
+      filters: [{ name: "订阅管家本机备份", extensions: ["sbbackup"] }] });
+    if (result.canceled || !result.filePath) return { cancelled: true };
+    const backup = await backupManager.create(result.filePath);
+    await dialog.showMessageBox(mainWindow, { type: "info", title: "备份完成", message: "加密备份已保存。", detail: result.filePath });
+    return { cancelled: false, fileName: path.basename(backup.file), createdAt: backup.createdAt };
+  });
+}
+function restoreSummary(info) {
+  const counts = info.summary.counts;
+  const operational = info.summary.operations?.counts;
+  const ledger = operational?.subscription ? `工作台：客户 ${operational.customer || 0} 个，订阅 ${operational.subscription || 0} 个，租期 ${operational.rental || 0} 个，收支 ${operational.entry || 0} 条。\n` : "";
+  return `备份时间：${new Date(info.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}\n软件版本：${info.appVersion}\n${ledger}旧版资料：订阅 ${counts.space} 个，母号 ${counts.mother_account} 个，成员 ${counts.child_account} 个，实收记录 ${counts.account_receipt} 条。\n数据库完整性、账户、金额与安全设置校验已通过。\n恢复前会自动保存当前状态，可从“恢复点”回滚。恢复后自动进入本机工作区，原网页访问与 MFA 配置继续保留。`;
+}
+async function restoreSelected(file) {
+  const manager = backupManager;
+  const prepared = await manager.prepareRestore(file);
+  let pending;
+  try { pending = validateQueue(await inspectBrowserQueue()); }
+  catch (error) { manager.discardPrepared(prepared); throw error; }
+  const answer = await dialog.showMessageBox(mainWindow, { type: "warning", title: "确认恢复备份", buttons: ["恢复并进入本机工作区", "取消"], defaultId: 1, cancelId: 1,
+    message: "此备份将替换当前本机账本和安全配置。", detail: restoreSummary(prepared.info) + (pending.length
+      ? `\n另有 ${pending.length} 项浏览器未提交操作，不在账本备份中。继续后会先单独加密保存，再清除旧队列；可在“维护 → 恢复已保存的未提交队列”人工重新排队。`
+      : "\n恢复会清除旧网页缓存和登录会话。") });
+  if (answer.response !== 0) { manager.discardPrepared(prepared); return { cancelled: true }; }
+  const queueFile = pending.length ? saveQueue(app.getPath("userData"), new URL(appUrl()).origin, pending, manager.protectKey) : undefined;
+  await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: "sessionStorage.clear()" }]);
+  // Detach old IndexedDB handles and prevent background browser retry while
+  // replacing the ledger. Pending commands already have an encrypted export.
+  await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml())}`);
+  const result = await manager.restorePrepared(prepared, { stop: stopBackend, start: async () => {
+    await session.defaultSession.clearStorageData({ origin: new URL(appUrl()).origin,
+      storages: ["cookies", "indexdb", "localstorage", "serviceworkers", "cachestorage"] });
+    await startBackend(); loadPreferences(); setupMaintenance();
+  } });
+  await dialog.showMessageBox(mainWindow, { type: "info", title: "恢复完成", message: "备份已恢复，已进入本机工作区。", detail: `恢复前的回滚备份：${path.basename(result.rollbackFile)}` + (queueFile ? `\n未提交队列已单独加密保存：${path.basename(queueFile)}` : "") });
+  return { cancelled: false, restoredAt: new Date().toISOString() };
+}
+async function inspectBrowserQueue() {
+  if (!mainWindow || !trustedLocalUrl(mainWindow.webContents.getURL(), port)) throw new Error("请先返回本地工作台，再检查未提交队列。");
+  return mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: `(${readBrowserQueue.toString()})()` }]);
+}
+async function importSavedQueue() {
+  return exclusiveMaintenance(async () => {
+    const token = await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: "sessionStorage.getItem('ops-token') || undefined" }]);
+    const actor = await assertMaintenanceOwner(token);
+    const choice = await dialog.showOpenDialog(mainWindow, { title: "选择本机加密未提交队列", defaultPath: backupManager.backupDirectory(), properties: ["openFile"],
+      filters: [{ name: "订阅管家未提交队列", extensions: ["sbqueue"] }] });
+    if (choice.canceled || !choice.filePaths[0]) return;
+    const rows = readQueue(choice.filePaths[0], new URL(appUrl()).origin, backupManager.unprotectKey);
+    const answer = await dialog.showMessageBox(mainWindow, { type: "warning", title: "恢复未提交队列", message: `将 ${rows.length} 项操作重新放入当前管理员的待提交队列。`,
+      detail: "不会直接写入账本。返回工作台检查后再重试提交；服务端仍会核对权限、命令编号和记录版本，重复命令不会重复入账。", buttons: ["放入待提交队列", "取消"], defaultId: 1, cancelId: 1 });
+    if (answer.response !== 0) return;
+    const reassigned = rows.map(row => ({ ...row, actorId: actor.id }));
+    const serialized = JSON.stringify(JSON.stringify(reassigned));
+    await mainWindow.webContents.executeJavaScriptInIsolatedWorld(1001, [{ code: `(${writeBrowserQueue.toString()})(JSON.parse(${serialized}))` }]);
+    await mainWindow.loadURL(appUrl("/workspace"));
+    await dialog.showMessageBox(mainWindow, { type: "info", message: "队列已恢复，请在工作台检查后再提交。" });
+  });
+}
+async function requestRestore() {
+  return exclusiveMaintenance(async () => {
+    const result = await dialog.showOpenDialog(mainWindow, { title: "选择订阅管家本机加密备份", properties: ["openFile"],
+      filters: [{ name: "订阅管家本机备份", extensions: ["sbbackup"] }] });
+    if (result.canceled || !result.filePaths[0]) return { cancelled: true };
+    return restoreSelected(result.filePaths[0]);
+  });
+}
+async function requestRestorePoint(name) {
+  return exclusiveMaintenance(async () => {
+    const points = backupManager.list();
+    let selected;
+    if (name !== undefined) {
+      if (typeof name !== "string" || !points.some(point => point.name === name)) throw new Error("恢复点不存在。");
+      selected = points.find(point => point.name === name);
+    } else {
+      if (!points.length) { await dialog.showMessageBox(mainWindow, { type: "info", message: "暂无自动恢复点。升级与恢复前会自动创建。" }); return { cancelled: true }; }
+      const answer = await dialog.showMessageBox(mainWindow, { type: "question", title: "选择恢复点", message: "选择要恢复的本机加密恢复点。",
+        buttons: [...points.map(point => `${point.name.startsWith("upgrade-") ? "升级前" : "恢复前"} · ${new Date(point.modifiedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`), "取消"], defaultId: points.length, cancelId: points.length });
+      if (answer.response >= points.length) return { cancelled: true };
+      selected = points[answer.response];
+    }
+    return restoreSelected(selected.path);
+  });
+}
+function installMaintenanceHandlers() {
+  const handle = (name, handler) => ipcMain.handle(name, (event, ...args) => { assertTrustedRenderer(event); return handler(...args); });
+  const owner = (action) => async (token, ...args) => { await assertMaintenanceOwner(token); return action(...args); };
+  handle("maintenance:backup", owner(requestBackup));
+  handle("maintenance:restore", owner(requestRestore));
+  handle("maintenance:restore-point", owner(requestRestorePoint));
+  handle("maintenance:list-points", owner(() => (backupManager?.list() || []).map(({ name, modifiedAt }) => ({ name, modifiedAt }))));
+  handle("desktop:preferences", () => ({ closeToTray: preferences.closeToTray, notifications: preferences.notifications }));
+  handle("desktop:set-preferences", setPreferences);
+}
+async function assertMaintenanceOwner(token) {
+  const cookies = await session.defaultSession.cookies.get({ url: appUrl(), name: "tam_session" });
+  return requireMaintenanceAdmin(appUrl(), token, cookies[0]?.value);
+}
+function menuAction(action) {
+  void action().catch(error => dialog.showErrorBox("本地维护未完成", error.message));
+}
+function installTrayMenu() {
+  if (!tray) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "打开订阅管家", click: showMainWindow }, { type: "separator" },
+    { label: "创建加密备份…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(requestBackup) },
+    { label: "恢复备份…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(requestRestore) },
+    { label: "到期通知", type: "checkbox", checked: preferences.notifications, click: item => setPreferences({ notifications: item.checked }) },
+    { type: "separator" }, { label: "退出订阅管家", click: () => app.quit() },
+  ]));
+}
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, "assets/icon.ico"));
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
+  tray.setToolTip("订阅管家 · 本地后台服务"); tray.on("click", showMainWindow); tray.on("double-click", showMainWindow);
+  installTrayMenu();
 }
 
 function openExternalWebUrl(target) {
@@ -131,7 +371,17 @@ async function createWindow() {
       preload: path.join(__dirname, "preload.js"),
     },
   });
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => { if (!smokeTest) mainWindow.show(); });
+  mainWindow.on("close", event => {
+    if (!isQuitting && preferences.closeToTray && backendReady && tray) {
+      event.preventDefault(); mainWindow.hide();
+      if (!preferences.closeHintShown) {
+        preferences.closeHintShown = true;
+        writeJsonAtomic(path.join(app.getPath("userData"), "desktop-preferences.json"), preferences);
+        tray.displayBalloon({ title: "订阅管家仍在后台运行", content: "点击托盘图标返回，右键选择“退出订阅管家”停止服务。", iconType: "info" });
+      }
+    } else if (!isQuitting) app.quit();
+  });
   mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
     if (!trustedLocalUrl(targetUrl, port)) {
       event.preventDefault();
@@ -146,50 +396,22 @@ async function createWindow() {
   await mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(loadingHtml())}`);
 }
 
-function configureFirstRun() {
-  return new Promise((resolve, reject) => {
-    let completed = false;
-    setupWindow = new BrowserWindow({
-      width: 520, height: 580, resizable: false, maximizable: false,
-      parent: mainWindow, modal: true, show: false, title: `${APP_NAME} · 首次设置`,
-      autoHideMenuBar: true, backgroundColor: "#f5f9f8",
-      webPreferences: {
-        contextIsolation: true, nodeIntegration: false, sandbox: true,
-        preload: path.join(__dirname, "setup-preload.js"),
-      },
-    });
-    setupWindow.webContents.on("will-navigate", (event) => event.preventDefault());
-    setupWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    setupWindow.once("ready-to-show", () => setupWindow.show());
-    ipcMain.handle("setup:save", (event, loginKey, confirmation) => {
-      if (!setupWindow || event.sender !== setupWindow.webContents ||
-          event.senderFrame !== event.sender.mainFrame || event.senderFrame?.url !== SETUP_URL) {
-        throw new Error("首次设置请求来源无效。");
-      }
-      if (loginKey !== confirmation) throw new Error("两次输入的登录密钥不一致。");
-      config = createConfig(app.getPath("userData"), loginKey);
-      completed = true;
-      // Allow the IPC reply to arrive before the form is destroyed.
-      setImmediate(() => { setupWindow?.close(); resolve(config); });
-      return { ok: true };
-    });
-    setupWindow.once("closed", () => {
-      ipcMain.removeHandler("setup:save");
-      setupWindow = undefined;
-      if (!completed) reject(new Error("FIRST_RUN_CANCELLED"));
-    });
-    setupWindow.loadFile(path.join(__dirname, "setup.html")).catch(reject);
-  });
-}
-
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: "应用", submenu: [
       { label: "刷新", accelerator: "Ctrl+R", click: () => mainWindow?.reload() },
+      { label: "重新进入本机工作区", enabled: backendReady && !maintenanceBusy, click: () => menuAction(enterLocalWorkspace) },
+      { label: "关闭窗口到托盘", type: "checkbox", checked: preferences.closeToTray, click: item => setPreferences({ closeToTray: item.checked }) },
+      { label: "到期通知", type: "checkbox", checked: preferences.notifications, click: item => setPreferences({ notifications: item.checked }) },
       { type: "separator" },
       { label: "退出", accelerator: "Alt+F4", click: () => app.quit() },
     ] },
     { label: "维护", submenu: [
+      { label: "创建本机加密备份…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(requestBackup) },
+      { label: "恢复备份…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(requestRestore) },
+      { label: "从自动恢复点回滚…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(requestRestorePoint) },
+      { label: "恢复已保存的未提交队列…", enabled: backendReady && !maintenanceBusy, click: () => menuAction(importSavedQueue) },
+      { type: "separator" },
       { label: "下载最新版本…", click: () => openExternalWebUrl(RELEASES_URL) },
       { label: "打开数据目录", click: () => void shell.openPath(app.getPath("userData")) },
       { label: "打开日志目录", click: () => {
@@ -215,17 +437,38 @@ async function bootstrap() {
     const runtimeDirectory = app.isPackaged
       ? path.join(process.resourcesPath, "runtime")
       : process.env.SUBSCRIPTION_BUTLER_RUNTIME_DIR || path.join(__dirname, "runtime");
-    const runtime = runtimePaths(runtimeDirectory);
-    port = await findFreePort();
+    runtime = runtimePaths(runtimeDirectory);
+    port = await persistentLoopbackPort(userDataDirectory);
     if (smokeTest) {
-      config = loadConfig(userDataDirectory) || createConfig(userDataDirectory, require("node:crypto").randomBytes(32).toString("hex"));
+      if (uiSmokeTest) {
+        if (loadConfig(userDataDirectory)) throw new Error("首次 UI 验收必须使用新的独立测试目录。");
+        await createWindow(); installCredentialHandlers();
+      }
+      config = initializeLocalConfig(userDataDirectory);
       writeEnvironmentFile(userDataDirectory, config);
       const environment = backendEnvironment(config, userDataDirectory, port);
       await runInitializer(runtime, environment, appendServerLog);
       await launchBackend(runtime, environment, appendServerLog, { onSpawn: (child) => { serverProcess = child; } });
+      backendReady = true; await authorizeLocalDesktop();
       const response = await fetch(appUrl("/login"), { signal: AbortSignal.timeout(10000), redirect: "manual" });
       if (response.status !== 200) throw new Error(`登录页面检查失败（HTTP ${response.status}）。`);
-      fs.writeFileSync(path.join(userDataDirectory, "smoke-result.json"), JSON.stringify({ status: "ok", health: "ok", loginStatus: response.status, version: app.getVersion() }, null, 2));
+      if (uiSmokeTest) {
+        await require("./ui-smoke.js").runUiSmoke({ BrowserWindow, url: appUrl(), authSecret: config.authSecret,
+          userData: userDataDirectory, preload: path.join(__dirname, "preload.js"), existingWindow: mainWindow,
+          onWindow: window => { mainWindow = window; }, restartBackend: async () => { await stopBackend(); await startBackend(); } });
+      }
+      let maintenance;
+      if (maintenanceSmokeTest) {
+        setupMaintenance();
+        const snapshot = path.join(userDataDirectory, "smoke-backup.sbbackup");
+        await backupManager.create(snapshot);
+        const prepared = await backupManager.prepareRestore(snapshot);
+        const restored = await backupManager.restorePrepared(prepared, { stop: stopBackend, start: startBackend });
+        const afterRestore = await fetch(appUrl("/login"), { signal: AbortSignal.timeout(10000), redirect: "manual" });
+        if (afterRestore.status !== 200) throw new Error("恢复后登录页面检查失败。");
+        maintenance = { encryptedBackup: true, restored: true, rollback: fs.existsSync(restored.rollbackFile) };
+      }
+      fs.writeFileSync(path.join(userDataDirectory, "smoke-result.json"), JSON.stringify({ status: "ok", health: "ok", loginStatus: response.status, version: app.getVersion(), maintenance }, null, 2));
       isQuitting = true;
       stopOwnedServer();
       app.exit(0);
@@ -236,21 +479,19 @@ async function bootstrap() {
     session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     session.defaultSession.setPermissionCheckHandler(() => false);
     installCredentialHandlers();
+    installMaintenanceHandlers();
+    new BackupManager({ userData: userDataDirectory, appVersion: app.getVersion() }).recoverInterruptedRestore();
+    loadPreferences();
     await createWindow();
     installMenu();
-    config = loadConfig(userDataDirectory) || await configureFirstRun();
-    writeEnvironmentFile(userDataDirectory, config);
-    const environment = backendEnvironment(config, userDataDirectory, port);
-    await runInitializer(runtime, environment, appendServerLog);
-    await launchBackend(runtime, environment, appendServerLog, { onSpawn: (child) => { serverProcess = child; } });
-    serverProcess.once("exit", (code, signal) => {
-      if (!isQuitting) {
-        appendServerLog("desktop.log", `${new Date().toISOString()} BACKEND_EXIT ${signal || code}\n`);
-        dialog.showErrorBox(`${APP_NAME} 服务已停止`, "本地数据服务意外停止，请重新打开程序。数据仍保存在本地数据目录。");
-        app.quit();
-      }
-    });
-    await mainWindow.loadURL(appUrl());
+    config = initializeLocalConfig(userDataDirectory);
+    setupMaintenance();
+    await backupManager.beforeUpgrade();
+    await startBackend();
+    backupManager.markStarted();
+    createTray(); installMenu();
+    setTimeout(checkReminders, 10000);
+    reminderInterval = setInterval(checkReminders, 5 * 60 * 1000);
     if (!trustedLocalUrl(mainWindow.webContents.getURL(), port)) {
       throw new Error("桌面窗口未完成本地页面加载，请重新启动应用。");
     }
@@ -276,13 +517,13 @@ if (!singleInstance) app.quit();
 else {
   app.setAppUserModelId(APP_ID);
   app.on("second-instance", () => {
-    const window = setupWindow || mainWindow;
+    const window = mainWindow;
     if (window) {
       if (window.isMinimized()) window.restore();
-      window.focus();
+      window.show(); window.focus();
     }
   });
   app.whenReady().then(bootstrap);
 }
-app.on("before-quit", () => { isQuitting = true; stopOwnedServer(); });
-app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => { isQuitting = true; clearInterval(reminderInterval); tray?.destroy(); stopOwnedServer(); });
+app.on("window-all-closed", () => { if (smokeTest && !isQuitting) return; if (isQuitting || !preferences.closeToTray || !tray) app.quit(); });

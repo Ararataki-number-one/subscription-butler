@@ -1,3 +1,4 @@
+// Modified for Subscription Butler: direct currency conversion without intermediate rounding.
 /**
  * Money helpers — integer minor units, currency-aware exponent.
  *
@@ -9,6 +10,25 @@
  */
 
 /** Format integer minor units to a plain decimal string using the exponent. */
+export function convertCurrencyMinor(amount: number, sourceUnit: number, sourceRate: string, targetUnit: number, targetRate: string): number {
+  if (!Number.isSafeInteger(amount)) throw new Error("金额必须是安全整数。");
+  const parse = (value:string) => {
+    const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
+    if (!match) throw new Error("汇率格式无效。");
+    const fraction = match[2] ?? "";
+    const coefficient = BigInt(match[1]+fraction);
+    if (coefficient<=BigInt(0)) throw new Error("汇率必须为正数。");
+    return {coefficient,scale:BigInt(10)**BigInt(fraction.length)};
+  };
+  if (![sourceUnit,targetUnit].every(unit=>Number.isInteger(unit)&&unit>=0&&unit<=6)) throw new Error("币种精度无效。");
+  const source=parse(sourceRate),target=parse(targetRate);
+  const numerator=BigInt(Math.abs(amount))*source.coefficient*target.scale*BigInt(10)**BigInt(targetUnit);
+  const denominator=source.scale*target.coefficient*BigInt(10)**BigInt(sourceUnit);
+  const result=Number((numerator+denominator/BigInt(2))/denominator)*(amount<0?-1:1);
+  if (!Number.isSafeInteger(result)) throw new Error("折算金额过大。");
+  return result;
+}
+
 export function formatMinor(amountMinor: number, exponent: number): string {
   if (!Number.isInteger(amountMinor)) {
     throw new Error(`amountMinor must be an integer, got: ${amountMinor}`);

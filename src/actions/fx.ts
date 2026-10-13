@@ -1,6 +1,8 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { refreshFromApi, ensureFreshRates } from "@/lib/fx/frankfurter";
 import { DEFAULT_RATE_BASE, isRateBase, type RateBase } from "@/lib/fx/base";
@@ -36,6 +38,7 @@ export type RefreshRatesResult =
 export async function refreshRates(
   baseInput: unknown = DEFAULT_RATE_BASE,
 ): Promise<RefreshRatesResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   if (!isRateBase(baseInput)) {
     return { ok: false, error: "无效的汇率基准。" };
   }
@@ -51,6 +54,7 @@ export async function refreshRates(
 }
 
 export async function refreshAutomaticRates(): Promise<RefreshRatesResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const result = await ensureFreshRates();
   revalidateMoneyViews();
   return { ok: true, stale: result.stale, fetchedAt: result.fetchedAt, base: DEFAULT_RATE_BASE };

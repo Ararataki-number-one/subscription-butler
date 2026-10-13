@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.mock("@/lib/action-auth", () => ({ hasAdminSession: vi.fn().mockResolvedValue(true) }));
 import { eq } from "drizzle-orm";
 import type { TestDb } from "@/test/db-harness";
 

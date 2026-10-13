@@ -1,6 +1,8 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
@@ -121,6 +123,7 @@ async function computeSnapshot(input: {
 export async function createSpace(
   input: unknown,
 ): Promise<SpaceActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = spaceFormSchema.safeParse(input);
   if (!parsed.success) {
     return validationError(parsed.error.issues[0]?.message);
@@ -175,6 +178,7 @@ export async function updateSpace(
   id: number,
   input: unknown,
 ): Promise<SpaceActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = spaceIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的空间。" };
@@ -299,6 +303,7 @@ export async function updateSpace(
 }
 
 export async function renewSpace(id: number): Promise<SpaceActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = spaceIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的空间。" };
@@ -356,6 +361,7 @@ export async function renewSpace(id: number): Promise<SpaceActionResult> {
 export async function deleteSpace(
   input: unknown,
 ): Promise<SpaceActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = deleteSpaceSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: "删除确认信息无效。" };

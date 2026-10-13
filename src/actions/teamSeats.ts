@@ -1,5 +1,7 @@
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
@@ -35,6 +37,7 @@ const schema = z.object({
     : data.billingPeriodCount === 1, "请选择有效的计费周期。");
 
 export async function updateTeamSeat(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "席位信息无效。" };
   const data = parsed.data;
@@ -116,6 +119,7 @@ export async function updateTeamSeat(input: unknown): Promise<{ ok: true } | { o
 }
 
 export async function renewMotherAccount(spaceId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   if (!z.number().int().positive().safeParse(spaceId).success) return { ok: false, error: "无效的订阅。" };
   const owner = getSpaceDetail(db, spaceId);
   if (!owner || owner.space.planType !== "team") {

@@ -45,7 +45,7 @@ jobs:
     name: Build Windows desktop
     needs: verify
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -67,9 +67,11 @@ jobs:
         run: npm run desktop:package
       - name: Smoke test bundled service and persistence
         run: npm run desktop:smoke
+      - name: Verify customer, accounting and permission HTTP flows
+        run: npm run desktop:operations-smoke
       - name: Smoke test packaged application
         shell: pwsh
-        timeout-minutes: 3
+        timeout-minutes: 5
         run: |
           $version = (Get-Content -LiteralPath desktop/package.json -Raw | ConvertFrom-Json).version
           $executablePath = Join-Path $env:GITHUB_WORKSPACE "desktop/dist/SubscriptionButler-$version-Windows-x64.exe"
@@ -78,7 +80,7 @@ jobs:
           }
           $smokeDirectory = Join-Path $env:RUNNER_TEMP ('subscription-butler-package-smoke-' + [guid]::NewGuid())
           $env:SUBSCRIPTION_BUTLER_USER_DATA = $smokeDirectory
-          $smokeProcess = Start-Process -FilePath $executablePath -ArgumentList '--smoke-test' -WindowStyle Hidden -Wait -PassThru
+          $smokeProcess = Start-Process -FilePath $executablePath -ArgumentList '--maintenance-smoke-test' -WindowStyle Hidden -Wait -PassThru
           if ($smokeProcess.ExitCode -ne 0) { throw 'Packaged application smoke test failed.' }
           $resultPath = Join-Path $smokeDirectory 'smoke-result.json'
           if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) { throw 'Smoke result was not produced.' }
@@ -86,7 +88,21 @@ jobs:
           if ($smokeResult.status -ne 'ok' -or $smokeResult.health -ne 'ok' -or $smokeResult.loginStatus -ne 200 -or $smokeResult.version -ne $version) {
             throw 'Packaged application did not pass health, login and version checks.'
           }
+          if (-not $smokeResult.maintenance.encryptedBackup -or -not $smokeResult.maintenance.restored -or -not $smokeResult.maintenance.rollback) { throw 'Packaged encrypted backup and restore checks failed.' }
           Write-Output "Packaged application smoke test passed for version $version."
+      - name: Verify no-key first open, forms and restart in real desktop
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $uiVersion = (Get-Content -LiteralPath desktop/package.json -Raw | ConvertFrom-Json).version
+          $uiExecutable = Join-Path $env:GITHUB_WORKSPACE 'desktop/dist/win-unpacked/订阅管家.exe'
+          $uiDirectory = Join-Path $env:RUNNER_TEMP ('subscription-butler-ui-smoke-' + [guid]::NewGuid())
+          $env:SUBSCRIPTION_BUTLER_USER_DATA = $uiDirectory
+          $uiProcess = Start-Process -FilePath $uiExecutable -ArgumentList '--ui-smoke-test' -WindowStyle Hidden -Wait -PassThru
+          if ($uiProcess.ExitCode -ne 0) { throw 'Real desktop UI flow failed.' }
+          $uiResult = Get-Content -LiteralPath (Join-Path $uiDirectory 'ui-smoke-result.json') -Raw | ConvertFrom-Json
+          if ($uiResult.status -ne 'ok' -or $uiResult.visibleWindow -or $uiResult.consoleErrors.Count -ne 0) { throw 'No-key desktop UI checks failed.' }
+          if ($uiResult.steps -notcontains 'backend-window-restart-owner-auto-entry-data-persistence') { throw 'Owner auto-entry or persistence check missing.' }
       - name: Save build for inspection
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

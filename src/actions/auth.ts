@@ -112,7 +112,7 @@ async function finishLogin(clientId: string): Promise<never> {
     await createSessionToken(),
     cookieOptions(SESSION_MAX_AGE_SECONDS),
   );
-  redirect("/");
+  redirect("/workspace");
 }
 
 function cookieOptions(maxAge: number) {

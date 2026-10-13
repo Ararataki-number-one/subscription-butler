@@ -3,18 +3,18 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
-const os = require("node:os");
 const path = require("node:path");
 const { once } = require("node:events");
 const { test } = require("node:test");
 const {
-  backendEnvironment, createConfig, externalWebUrl, findFreePort, launchBackend,
-  loadConfig, requestHealth, runInitializer, runtimePaths, trustedLocalUrl, validateLoginKey,
+  assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
+  loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths, trustedLocalUrl, validateLoginKey,
 } = require("../runtime.js");
 
 function temporaryDirectory(t) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "subscription-butler-test-"));
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const root = path.resolve(__dirname, "../../test-artifacts"); fs.mkdirSync(root, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(root, "subscription-butler-test-"));
+  t.after(() => { assert.ok(path.resolve(directory).startsWith(`${root}${path.sep}`)); fs.rmSync(directory, { recursive: true, force: true }); });
   return directory;
 }
 
@@ -32,6 +32,47 @@ test("first-run config preserves exact Unicode key while only storing its hash",
   }
   assert.throws(() => createConfig(directory, "another-key"), /不能覆盖/u);
   assert.deepEqual(loadConfig(directory), config);
+});
+test("smoke isolation rejects real profile, case aliases, descendants and Windows junctions", t => {
+  const directory = temporaryDirectory(t), actual = path.join(directory, "actual-profile"), isolated = path.join(directory, "isolated-profile");
+  fs.mkdirSync(actual); fs.writeFileSync(path.join(actual, "marker.txt"), "unchanged synthetic ledger");
+  assert.throws(() => assertSmokeDirectory(actual, actual), /完全独立/u);
+  assert.throws(() => assertSmokeDirectory(path.join(actual, "nested-test"), actual), /完全独立/u);
+  assert.throws(() => assertSmokeDirectory(directory, actual), /完全独立/u);
+  if (process.platform === "win32") {
+    assert.throws(() => assertSmokeDirectory(actual.toUpperCase(), actual), /完全独立/u);
+    const alias = path.join(directory, "profile-junction"); fs.symlinkSync(actual, alias, "junction");
+    assert.throws(() => assertSmokeDirectory(alias, actual), /完全独立/u);
+    assert.throws(() => assertSmokeDirectory(path.join(alias, "nested-test"), actual), /完全独立/u);
+    fs.unlinkSync(alias);
+  }
+  assert.equal(assertSmokeDirectory(isolated, actual), path.join(fs.realpathSync.native(directory), "isolated-profile"));
+  assert.equal(fs.readFileSync(path.join(actual, "marker.txt"), "utf8"), "unchanged synthetic ledger");
+});
+test("local desktop initializes private config without a key prompt and preserves it across restarts", t => {
+  const directory = temporaryDirectory(t);
+  const first = initializeLocalConfig(directory);
+  assert.equal(first.authSecret.length, 64); assert.equal(first.loginKeyHash.length, 64);
+  assert.deepEqual(initializeLocalConfig(directory), first);
+  assert.equal(fs.existsSync(path.join(directory, "credentials.bin")), false);
+  const legacy = { ...first, authSecret: "8121e68c-fd96-45e4-b821-8e3d51af70e5" };
+  fs.writeFileSync(path.join(directory, "config.json"), JSON.stringify(legacy));
+  assert.deepEqual(initializeLocalConfig(directory), legacy);
+});
+test("native local owner cookie matches backend verifier and expires without exposing a login key", async t => {
+  const directory = temporaryDirectory(t), config = initializeLocalConfig(directory), now = Date.now();
+  const { verifySessionToken } = await import("../../src/lib/auth.ts");
+  const previous = process.env.APP_AUTH_SECRET;
+  try {
+    process.env.APP_AUTH_SECRET = config.authSecret;
+    const session = createLocalOwnerSession(config.authSecret, now);
+    assert.equal(await verifySessionToken(session.value, now), true);
+    assert.equal(await verifySessionToken(session.value, session.expiresAt + 1), false);
+    assert.equal(session.value.includes(config.authSecret), false); assert.equal(session.value.includes(config.loginKeyHash), false);
+    assert.notEqual(createLocalOwnerSession(config.authSecret, now).value, session.value);
+    process.env.APP_AUTH_SECRET = "wrong-signing-secret";
+    assert.equal(await verifySessionToken(session.value, now), false);
+  } finally { if (previous === undefined) delete process.env.APP_AUTH_SECRET; else process.env.APP_AUTH_SECRET = previous; }
 });
 
 test("invalid keys and corrupt configs never silently replace existing data", (t) => {
@@ -64,12 +105,15 @@ test("backend gets loopback, persistent SQLite, auth and correct cookie flag", (
   const environment = backendEnvironment(config, directory, 31337, {
     NODE_OPTIONS: "--require=untrusted", ELECTRON_RUN_AS_NODE: "1", SYSTEMROOT: "C:\\Windows",
     DB_FILE_NAME: "wrong.db", APP_ALLOW_INSECURE_COOKIES: "false", HOSTNAME: "0.0.0.0",
+    OPS_PUBLIC_ORIGIN: "https://self-hosted.example.org", OPS_DESKTOP_ORIGIN: "http://127.0.0.1:1111",
   });
   assert.equal(environment.HOSTNAME, "127.0.0.1");
   assert.equal(environment.PORT, "31337");
   assert.equal(environment.DB_FILE_NAME, path.join(directory, "data", "app.db"));
   assert.equal(environment.APP_AUTH_SECRET, config.authSecret);
   assert.equal(environment.APP_ALLOW_INSECURE_COOKIES, "true");
+  assert.equal(environment.OPS_DESKTOP_ORIGIN, "http://127.0.0.1:31337");
+  assert.equal(environment.OPS_PUBLIC_ORIGIN, undefined);
   assert.equal(environment.SYSTEMROOT, "C:\\Windows");
   assert.equal(environment.NODE_OPTIONS, undefined);
   assert.equal(environment.ELECTRON_RUN_AS_NODE, undefined);
@@ -87,6 +131,18 @@ test("only exact loopback origin can use desktop credentials", () => {
   assert.equal(externalWebUrl("https://github.com/Ararataki-number-one/subscription-butler/releases"), true);
 });
 
+test("desktop origin survives restarts and never silently switches occupied ports", async (t) => {
+  const directory = temporaryDirectory(t);
+  const first = await persistentLoopbackPort(directory);
+  assert.equal(await persistentLoopbackPort(directory), first);
+  const server = http.createServer((_request, response) => response.end("foreign process"));
+  await new Promise(resolve => server.listen(first, "127.0.0.1", resolve));
+  try {
+    await assert.rejects(persistentLoopbackPort(directory), /已被占用/u);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, "server-port.json"), "utf8")).port, first);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+  assert.equal(await persistentLoopbackPort(directory), first);
+});
 test("distribution validates every bundled executable/script", (t) => {
   const directory = temporaryDirectory(t);
   for (const file of ["node.exe", "initialize.cjs", "server.js"]) {
@@ -126,7 +182,8 @@ test("initializer runs with bundled Node and propagates migration failure", asyn
 });
 
 test("launcher waits for healthy service then stops child cleanly", async (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "subscription-butler-test-"));
+  const root = path.resolve(__dirname, "../../test-artifacts"); fs.mkdirSync(root, { recursive: true });
+  const directory = fs.mkdtempSync(path.join(root, "subscription-butler-test-"));
   const serverFile = path.join(directory, "server.js");
   fs.writeFileSync(serverFile, 'require("node:http").createServer((req,res)=>{res.end(JSON.stringify({status:"ok"}));}).listen(Number(process.env.PORT),process.env.HOSTNAME);');
   const port = await findFreePort();
@@ -137,7 +194,7 @@ test("launcher waits for healthy service then stops child cleanly", async (t) =>
       child.kill();
       await exited;
     }
-    fs.rmSync(directory, { recursive: true, force: true });
+    assert.ok(path.resolve(directory).startsWith(`${root}${path.sep}`)); fs.rmSync(directory, { recursive: true, force: true });
   });
   assert.equal(await requestHealth(port), true);
 });

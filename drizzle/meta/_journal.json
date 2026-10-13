@@ -155,6 +155,13 @@
       "when": 1791769538153,
       "tag": "0021_member_roles_and_payment_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791849600000,
+      "tag": "0022_operations",
+      "breakpoints": true
     }
   ]
 }

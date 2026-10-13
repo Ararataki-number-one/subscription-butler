@@ -41,6 +41,9 @@
 /tmp/
 /.smoke-data/
 /test-artifacts/
+*.sbbackup
+*.sbqueue
+*.sbrestore
 /work/
 /desktop/desktop-config.json
 /desktop/*.log

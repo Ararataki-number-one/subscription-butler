@@ -1,6 +1,8 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -37,6 +39,7 @@ const CURRENCY_PATHS = [
 export async function addCurrency(
   input: CurrencyInput,
 ): Promise<CurrencyActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = currencySchema.safeParse(input);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -71,6 +74,7 @@ export async function updateCurrency(
   code: string,
   input: CurrencyUpdateInput,
 ): Promise<CurrencyActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedCode = currencyCodeSchema.safeParse({ code });
   if (!parsedCode.success) {
     return { ok: false, error: "无效的币种。", field: "name" };
@@ -113,6 +117,7 @@ export async function updateCurrency(
 export async function deleteCurrency(
   code: string,
 ): Promise<CurrencyActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedCode = currencyCodeSchema.safeParse({ code });
   if (!parsedCode.success) {
     return { ok: false, error: "无效的币种。", field: "code" };

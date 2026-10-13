@@ -1,4 +1,5 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
+vi.mock("@/lib/action-auth", () => ({ hasAdminSession: vi.fn().mockResolvedValue(true) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TestDb } from "@/test/db-harness";
 

@@ -8,6 +8,25 @@ const { spawn } = require("node:child_process");
 
 const CONFIG_VERSION = 1;
 const LOCAL_HOST = "127.0.0.1";
+function assertSmokeDirectory(target, defaultDirectory, platform = process.platform) {
+  function canonicalDirectory(value) {
+    let existing = path.resolve(value); const missing = [];
+    while (!fs.existsSync(existing)) {
+      const parent = path.dirname(existing);
+      if (parent === existing) throw new Error("测试目录无法解析。");
+      missing.unshift(path.basename(existing)); existing = parent;
+    }
+    return path.join(fs.realpathSync.native(existing), ...missing);
+  }
+  const resolvedTarget = canonicalDirectory(target), resolvedDefault = canonicalDirectory(defaultDirectory);
+  const normalize = value => platform === "win32" ? value.toLowerCase() : value;
+  const first = normalize(resolvedTarget), second = normalize(resolvedDefault);
+  const prefix = value => value.endsWith(path.sep) ? value : `${value}${path.sep}`;
+  if (first === second || first.startsWith(prefix(second)) || second.startsWith(prefix(first))) {
+    throw new Error("冒烟测试必须使用与真实数据目录完全独立的测试目录（不能经符号链接或目录联接指向真实数据）。");
+  }
+  return resolvedTarget;
+}
 
 function validateLoginKey(value) {
   if (typeof value !== "string" || value.length < 8 || value.length > 256 ||
@@ -65,6 +84,17 @@ function createConfig(userDataDirectory, loginKey) {
   writeEnvironmentFile(userDataDirectory, config);
   return config;
 }
+function initializeLocalConfig(userDataDirectory) {
+  return loadConfig(userDataDirectory) || createConfig(userDataDirectory, crypto.randomBytes(32).toString("hex"));
+}
+function createLocalOwnerSession(authSecret, now = Date.now()) {
+  if (typeof authSecret !== "string" || authSecret.length < 32 || authSecret.length > 256 ||
+      !Number.isSafeInteger(now) || now < 0) throw new Error("本机授权配置无效。");
+  const expiresAt = now + 7 * 24 * 60 * 60 * 1000;
+  const payload = `v1.${expiresAt}.${crypto.randomUUID()}`;
+  const signature = crypto.createHmac("sha256", authSecret).update(payload).digest("hex");
+  return { value: `${payload}.${signature}`, expiresAt };
+}
 
 function writeEnvironmentFile(userDataDirectory, config) {
   validateConfig(config);
@@ -106,6 +136,7 @@ function backendEnvironment(config, userDataDirectory, port, inherited = process
   // Do not inherit launcher/runtime overrides from a development shell.
   delete environment.NODE_OPTIONS;
   delete environment.ELECTRON_RUN_AS_NODE;
+  delete environment.OPS_PUBLIC_ORIGIN;
   return {
     ...environment,
     NODE_ENV: "production",
@@ -116,6 +147,7 @@ function backendEnvironment(config, userDataDirectory, port, inherited = process
     APP_LOGIN_KEY_HASH: config.loginKeyHash,
     APP_MFA_ISSUER: "订阅管家",
     APP_ALLOW_INSECURE_COOKIES: "true",
+    OPS_DESKTOP_ORIGIN: `http://${LOCAL_HOST}:${port}`,
     TZ: "Asia/Shanghai",
     NEXT_TELEMETRY_DISABLED: "1",
   };
@@ -140,6 +172,24 @@ function trustedLocalUrl(target, port) {
   } catch {
     return false;
   }
+}
+async function persistentLoopbackPort(userDataDirectory) {
+  const file = path.join(userDataDirectory, "server-port.json");
+  if (!fs.existsSync(file)) {
+    const port = await findFreePort();
+    writeAtomic(file, JSON.stringify({ version: 1, port }));
+    return port;
+  }
+  if (fs.lstatSync(file).isSymbolicLink()) throw new Error("本地端口配置不能是符号链接。");
+  let value;
+  try { value = JSON.parse(fs.readFileSync(file, "utf8")); } catch { throw new Error("本地端口配置损坏，已保留账本和离线队列。"); }
+  if (value?.version !== 1 || !Number.isInteger(value.port) || value.port < 1024 || value.port > 65535) throw new Error("本地端口配置无效，已保留账本和离线队列。");
+  await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", () => reject(new Error(`本地端口 ${value.port} 已被占用，启动已停止。请退出占用程序后重新启动，以保留同一地址下的离线队列。`)));
+    server.listen(value.port, LOCAL_HOST, () => server.close(error => error ? reject(error) : resolve()));
+  });
+  return value.port;
 }
 
 function externalWebUrl(target) {
@@ -221,7 +271,7 @@ async function launchBackend(runtime, env, onLog = () => {}, options = {}) {
 }
 
 module.exports = {
-  LOCAL_HOST, backendEnvironment, createConfig, externalWebUrl, findFreePort,
-  launchBackend, loadConfig, requestHealth, runInitializer, runtimePaths,
+  LOCAL_HOST, assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig,
+  launchBackend, loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths,
   trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
 };

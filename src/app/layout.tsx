@@ -6,8 +6,10 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { startSpaceExpiryReminderScheduler } from "@/lib/reminders/space-expiry-reminder-scheduler";
+import { startFxRefreshScheduler } from "@/lib/fx/scheduler";
 
 startSpaceExpiryReminderScheduler();
+startFxRefreshScheduler();
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

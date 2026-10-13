@@ -1,5 +1,7 @@
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -19,6 +21,7 @@ function revalidate(spaceId: number) {
 }
 
 export async function saveAccountReceipt(input: unknown): Promise<Result> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = accountReceiptSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "收款信息无效。" };
   const data = parsed.data;
@@ -65,6 +68,7 @@ export async function saveAccountReceipt(input: unknown): Promise<Result> {
 }
 
 export async function deleteAccountReceipt(input: unknown): Promise<Result> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = z.number().int().positive().safeParse(input);
   if (!parsed.success) return { ok: false, error: "无效的收款记录。" };
   const row = db.delete(accountReceipt).where(eq(accountReceipt.id, parsed.data)).returning().get();

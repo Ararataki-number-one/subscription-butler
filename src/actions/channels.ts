@@ -1,6 +1,8 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { z } from "zod";
@@ -36,6 +38,7 @@ function revalidateChannels() {
 export type ChannelActionResult = { ok: true } | { ok: false; error: string };
 
 export async function addChannel(input: unknown): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = channelSchema.safeParse(typeof input === "string" ? { name: input } : input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "请输入渠道名称。" };
@@ -52,10 +55,12 @@ export async function renameChannel(
   id: number,
   name: string,
 ): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   return updateChannel(id, { name });
 }
 
 export async function updateChannel(id: number, input: unknown): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = channelIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的渠道。" };
@@ -88,6 +93,7 @@ export async function updateChannel(id: number, input: unknown): Promise<Channel
 }
 
 export async function archiveChannel(id: number): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = channelIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的渠道。" };
@@ -102,6 +108,7 @@ export async function archiveChannel(id: number): Promise<ChannelActionResult> {
 export async function reactivateChannel(
   id: number,
 ): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = channelIdSchema.safeParse({ id });
   if (!parsedId.success) {
     return { ok: false, error: "无效的渠道。" };
@@ -118,6 +125,7 @@ export async function reactivateChannel(
 }
 
 export async function setChannelFavorite(id: number, favorite: unknown): Promise<ChannelActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = z.object({ id: z.number().int().positive(), favorite: z.boolean() }).safeParse({ id, favorite });
   if (!parsed.success) return { ok: false, error: "无效的渠道设置。" };
   const current = getChannel(db, parsed.data.id);

@@ -2,7 +2,7 @@
 
 // Modified for 订阅管家: default name shown in authenticator enrollment.
 
-import { cookies } from "next/headers";
+import { hasAdminSession } from "@/lib/action-auth";
 import { revalidatePath } from "next/cache";
 import QRCode from "qrcode";
 import { db } from "@/db";
@@ -11,11 +11,7 @@ import {
   disableMfa as disableStoredMfa,
   startMfaEnrollment,
 } from "@/db/mfa";
-import {
-  AUTH_COOKIE_NAME,
-  verifyLoginKey,
-  verifySessionToken,
-} from "@/lib/auth";
+import { verifyLoginKey } from "@/lib/auth";
 
 type MfaActionResult = { ok: true } | { ok: false; error: string };
 
@@ -26,7 +22,7 @@ export async function beginMfaEnrollment(): Promise<
     }
   | { ok: false; error: string }
 > {
-  if (!(await hasAuthenticatedSession())) return unauthorized();
+  if (!(await hasAdminSession())) return unauthorized();
 
   try {
     const enrollment = startMfaEnrollment(db, {
@@ -55,7 +51,7 @@ export async function beginMfaEnrollment(): Promise<
 }
 
 export async function enableMfa(code: string): Promise<MfaActionResult> {
-  if (!(await hasAuthenticatedSession())) return unauthorized();
+  if (!(await hasAdminSession())) return unauthorized();
 
   try {
     if (!confirmMfaEnrollment(db, code)) {
@@ -69,7 +65,7 @@ export async function enableMfa(code: string): Promise<MfaActionResult> {
 }
 
 export async function disableMfa(loginKey: string): Promise<MfaActionResult> {
-  if (!(await hasAuthenticatedSession())) return unauthorized();
+  if (!(await hasAdminSession())) return unauthorized();
 
   try {
     if (!(await verifyLoginKey(loginKey))) {
@@ -81,11 +77,6 @@ export async function disableMfa(loginKey: string): Promise<MfaActionResult> {
   } catch {
     return { ok: false, error: "无法关闭 MFA，请检查登录密钥配置。" };
   }
-}
-
-async function hasAuthenticatedSession(): Promise<boolean> {
-  const cookieStore = await cookies();
-  return verifySessionToken(cookieStore.get(AUTH_COOKIE_NAME)?.value);
 }
 
 function unauthorized(): { ok: false; error: string } {

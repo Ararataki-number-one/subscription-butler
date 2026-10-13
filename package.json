@@ -1,6 +1,6 @@
 {
   "name": "subscription-butler",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "private": true,
   "engines": {
     "node": "24.18.x"
@@ -19,7 +19,8 @@
     "desktop:prepare": "node scripts/prepare-desktop.cjs",
     "desktop:package": "npm run build && npm run desktop:prepare && npm --prefix desktop run dist",
     "desktop:test": "node --test desktop/tests/*.test.cjs",
-    "desktop:smoke": "node scripts/smoke-runtime.cjs"
+    "desktop:smoke": "node scripts/smoke-runtime.cjs",
+    "desktop:operations-smoke": "node scripts/smoke-operations.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

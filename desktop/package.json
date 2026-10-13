@@ -1,12 +1,12 @@
 {
   "name": "subscription-butler-desktop",
-  "version": "1.0.0",
+  "version": "4.0.0",
   "private": true,
   "description": "订阅管家 Windows 桌面软件",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable --x64",
+    "dist": "electron-builder --win --x64",
     "test": "node --test tests/*.test.cjs"
   },
   "devDependencies": {
@@ -21,6 +21,11 @@
       "main.js",
       "preload.js",
       "runtime.js",
+      "backups.js",
+      "maintenance.js",
+      "reminders.js",
+      "offline-queue.js",
+      "ui-smoke.js",
       "setup.html",
       "setup.css",
       "setup.js",
@@ -59,17 +64,33 @@
       "icon": "assets/icon.ico",
       "target": [
         {
-          "target": "portable",
           "arch": [
             "x64"
-          ]
+          ],
+          "target": "nsis"
+        },
+        {
+          "arch": [
+            "x64"
+          ],
+          "target": "portable"
         }
       ]
     },
     "portable": {
       "artifactName": "SubscriptionButler-${version}-Windows-x64.exe"
     },
-    "afterPack": "after-pack.cjs"
+    "afterPack": "after-pack.cjs",
+    "nsis": {
+      "shortcutName": "订阅管家",
+      "artifactName": "SubscriptionButler-${version}-Setup-Windows-x64.exe",
+      "oneClick": true,
+      "createStartMenuShortcut": true,
+      "perMachine": false,
+      "createDesktopShortcut": false,
+      "allowElevation": false
+    },
+    "electronDist": "node_modules/electron/dist"
   },
   "author": {
     "name": "XiaoxiaoZ",

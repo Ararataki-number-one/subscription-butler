@@ -1,5 +1,7 @@
 "use server";
 
+import { hasAdminSession } from "@/lib/action-auth";
+
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { differenceInCalendarDays } from "date-fns";
@@ -33,6 +35,7 @@ export type SettingsActionResult =
 export async function updateStatusThresholds(
   input: StatusThresholdInput,
 ): Promise<SettingsActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = statusThresholdSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -52,6 +55,7 @@ export async function updateStatusThresholds(
 export async function updateSpaceEmailReminderSettings(
   input: SpaceEmailReminderInput,
 ): Promise<SettingsActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = spaceEmailReminderSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -68,6 +72,7 @@ export async function updateSpaceEmailReminderSettings(
 export async function updateChildAccountEmailReminderSettings(
   input: ChildAccountEmailReminderInput,
 ): Promise<SettingsActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = childAccountEmailReminderSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -84,6 +89,7 @@ export async function updateChildAccountEmailReminderSettings(
 export async function sendSpaceEmailReminderTest(
   input?: SpaceEmailReminderInput,
 ): Promise<SettingsActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = spaceEmailReminderSchema.safeParse(
     input ?? getSpaceEmailReminderSettings(db),
   );
@@ -128,6 +134,7 @@ export async function sendSpaceEmailReminderTest(
 export async function sendChildAccountEmailReminderTest(
   input?: ChildAccountEmailReminderInput,
 ): Promise<SettingsActionResult> {
+  if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsed = childAccountEmailReminderSchema.safeParse(
     input ?? getChildAccountEmailReminderSettings(db),
   );
