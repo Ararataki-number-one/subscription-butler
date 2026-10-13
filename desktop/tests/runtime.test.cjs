@@ -4,11 +4,11 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { once } = require("node:events");
+const { EventEmitter, once } = require("node:events");
 const { test } = require("node:test");
 const {
   assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig, launchBackend,
-  loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths, trustedLocalUrl, validateLoginKey,
+  loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, validateLoginKey,
 } = require("../runtime.js");
 
 function temporaryDirectory(t) {
@@ -214,4 +214,22 @@ test("launcher terminates an unresponsive backend on timeout", async (t) => {
   await assert.rejects(launchBackend({ node: process.execPath, server: serverFile, directory }, { ...process.env, PORT: String(await findFreePort()) }, undefined, { timeoutMs: 150, intervalMs: 20, onSpawn: (value) => { child = value; } }), /启动超时/u);
   if (child.exitCode === null) await once(child, "exit");
   assert.equal(child.killed, true);
+});
+test("backend shutdown waits for exit and closes Chrome connections before restart can continue", async () => {
+  const child = new EventEmitter(); child.exitCode = null; child.signalCode = null;
+  const order = [];
+  await stopBackendAndCloseConnections(child, current => {
+    assert.equal(current, child); order.push("terminate");
+    setImmediate(() => { order.push("exit"); child.exitCode = 0; child.emit("exit", 0); });
+  }, async () => { assert.equal(child.exitCode, 0); order.push("close-connections"); });
+  order.push("restart");
+  assert.deepEqual(order, ["terminate", "exit", "close-connections", "restart"]);
+  await stopBackendAndCloseConnections(null, () => assert.fail("must not kill"), async () => order.push("close-again"));
+  assert.equal(order.at(-1), "close-again");
+});
+test("failed backend termination does not proceed to clear sockets or a replacement backend", async () => {
+  const child = new EventEmitter(); child.exitCode = null; child.signalCode = null;
+  let closed = false;
+  await assert.rejects(stopBackendAndCloseConnections(child, () => {}, async () => { closed = true; }, 10), /停止超时/u);
+  assert.equal(closed, false); assert.equal(child.listenerCount("exit"), 0);
 });

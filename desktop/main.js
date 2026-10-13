@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   assertSmokeDirectory, backendEnvironment, createLocalOwnerSession, externalWebUrl, initializeLocalConfig, launchBackend, persistentLoopbackPort,
-  loadConfig, runInitializer, runtimePaths, trustedLocalUrl, writeEnvironmentFile,
+  loadConfig, runInitializer, runtimePaths, stopBackendAndCloseConnections, trustedLocalUrl, writeEnvironmentFile,
 } = require("./runtime.js");
 const { BackupManager, writeJsonAtomic } = require("./backups.js");
 const { maintenanceRunner, requireMaintenanceAdmin } = require("./maintenance.js");
@@ -145,12 +145,7 @@ function stopOwnedServer() { terminateProcess(serverProcess); }
 async function stopBackend() {
   backendReady = false;
   const child = serverProcess; serverProcess = undefined;
-  if (!child || child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("本地服务停止超时，原数据尚未替换。")), 10000);
-    child.once("exit", () => { clearTimeout(timer); resolve(); });
-    terminateProcess(child);
-  });
+  await stopBackendAndCloseConnections(child, terminateProcess, () => session.defaultSession.closeAllConnections());
 }
 async function startBackend() {
   config = loadConfig(app.getPath("userData"));

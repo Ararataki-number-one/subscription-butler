@@ -9,7 +9,7 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload } });
   let window = existingWindow || createHiddenWindow(); onWindow(window);
   const errors = [], steps = [];
-  let closing = false;
+  let closing = false, navigationRetries = 0;
   function monitor(target) {
   target.webContents.on("console-message", (_event, details, legacyMessage) => {
     const level = typeof details === "object" ? details.level : details;
@@ -121,7 +121,16 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     steps.push("customer-rental-history");
     closing = true; window.destroy(); await restartBackend();
     window = createHiddenWindow(); onWindow(window); closing = false; monitor(window);
-    await window.loadURL(new URL("/workspace", url).href);
+    const workspaceUrl = new URL("/workspace", url).href;
+    try { await window.loadURL(workspaceUrl); }
+    catch (error) {
+      if (!/ERR_FAILED \(-2\)/u.test(error.message) || errors.length) throw error;
+      const healthy = await fetch(new URL("/api/health", url), { signal: AbortSignal.timeout(2000) });
+      if (healthy.status !== 200 || (await healthy.json()).status !== "ok") throw error;
+      await new Promise(resolve => setTimeout(resolve, 250));
+      navigationRetries += 1;
+      await window.loadURL(workspaceUrl);
+    }
     await waitFor(() => [...document.querySelectorAll("nav button")].some(button => button.textContent === "今日工作台"), "workspace reload");
     data = await snapshot(); assert.ok(data.customers.some(row => row.id === customer.id)); assert.ok(data.entries.some(row => row.id === receipt.id));
     const restartedActor = await evaluate(async () => (await (await fetch("/api/operations/access", { cache: "no-store" })).json()).actor);
@@ -129,7 +138,7 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     assert.equal(await evaluate(() => !!document.querySelector("input[name=key],#setup-form")), false);
     steps.push("backend-window-restart-owner-auto-entry-data-persistence");
     assert.deepEqual(errors, []);
-    const result = { status: "ok", visibleWindow: false, steps, consoleErrors: [] };
+    const result = { status: "ok", visibleWindow: false, steps, navigationRetries, consoleErrors: [] };
     fs.writeFileSync(path.join(userData, "ui-smoke-result.json"), JSON.stringify(result, null, 2));
     return result;
   } catch (error) {

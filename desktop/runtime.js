@@ -269,9 +269,23 @@ async function launchBackend(runtime, env, onLog = () => {}, options = {}) {
   child.kill();
   throw new Error("本地服务启动超时，请查看应用日志。");
 }
+async function stopBackendAndCloseConnections(child, terminate, closeConnections, timeoutMs = 10000) {
+  if (child && child.exitCode === null && child.signalCode === null) {
+    await new Promise((resolve, reject) => {
+      const onExit = () => { clearTimeout(timer); resolve(); };
+      const timer = setTimeout(() => { child.removeListener("exit", onExit); reject(new Error("本地服务停止超时，原数据尚未替换。")); }, timeoutMs);
+      child.once("exit", onExit);
+      try { terminate(child); }
+      catch (error) { clearTimeout(timer); child.removeListener("exit", onExit); reject(error); }
+    });
+  }
+  // Chromium may otherwise reuse an idle socket belonging to the process
+  // that just exited, even after Node reports the replacement service healthy.
+  await closeConnections();
+}
 
 module.exports = {
   LOCAL_HOST, assertSmokeDirectory, backendEnvironment, createConfig, createLocalOwnerSession, externalWebUrl, findFreePort, initializeLocalConfig,
   launchBackend, loadConfig, persistentLoopbackPort, requestHealth, runInitializer, runtimePaths,
-  trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
+  stopBackendAndCloseConnections, trustedLocalUrl, validateConfig, validateLoginKey, writeEnvironmentFile,
 };
