@@ -5,6 +5,7 @@ import { hasAdminSession } from "@/lib/action-auth";
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { OperationsError, OperationsStore } from "@/db/operations";
 import {
   deleteChildAccount as deleteChildAccountRow,
   getChildAccount,
@@ -302,6 +303,7 @@ export async function updateChildAccount(
 
 export async function renewChildAccount(
   id: number,
+  expectedDueDate?: string,
 ): Promise<ChildAccountActionResult> {
   if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = childAccountIdSchema.safeParse({ id });
@@ -316,18 +318,23 @@ export async function renewChildAccount(
   if (childUsageStatus(existing) !== "rented") {
     return { ok: false, error: "只有出租中的账号需要推进收款周期。" };
   }
-  if (existing.isMotherAccount) return renewMotherAccount(existing.spaceId);
+  if (existing.isMotherAccount) return renewMotherAccount(existing.spaceId, expectedDueDate);
 
-  updateChildAccountRow(db, parsedId.data.id, {
-    nextPaymentDate: renewPaymentDueDate(
-      existing.monthlyPaymentDay,
-      {
-        unit: existing.billingPeriodUnit as Period["unit"],
-        count: existing.billingPeriodCount,
-      },
-      existing.nextPaymentDate,
-    ),
-  });
+  try {
+    new OperationsStore(db.$client).renewClassicSource({ kind: "rental", source: `child_account:${existing.id}`,
+      expectedDueDate: expectedDueDate ?? existing.nextPaymentDate ?? undefined, update: () => updateChildAccountRow(db, parsedId.data.id, {
+        nextPaymentDate: renewPaymentDueDate(
+          existing.monthlyPaymentDay,
+          {
+            unit: existing.billingPeriodUnit as Period["unit"],
+            count: existing.billingPeriodCount,
+          },
+          existing.nextPaymentDate,
+        ),
+      }) });
+  } catch (error) {
+    return { ok: false, error: error instanceof OperationsError ? error.message : "续费失败，请重试。" };
+  }
   revalidateSpace(existing.spaceId);
   return { ok: true };
 }

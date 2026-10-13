@@ -76,6 +76,28 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }, selector, value);
   }
+  async function checkRenewedCalendar(recordId, account, dueDate, nextDueDate) {
+    await waitFor(() => !!document.querySelector("[data-renewal-calendar]") && document.querySelector("h1")?.textContent === "续费日历", "renewed calendar is visible");
+    await waitFor((id, originalDate, nextDate) => {
+      const table = document.querySelector('table[aria-label="即将到期"]');
+      const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].filter(row => row.getAttribute("data-renewal-kind") === "subscription" && row.getAttribute("data-renewal-id") === id);
+      return rows.length === 2 && rows.filter(row => row.getAttribute("data-renewal-date") === originalDate && row.getAttribute("data-renewal-state") === "renewed").length === 1 && rows.filter(row => row.getAttribute("data-renewal-date") === nextDate && row.getAttribute("data-renewal-state") === "due-soon").length === 1;
+    }, "upcoming table keeps original and next occurrences together across months", 20000, [recordId, dueDate, nextDueDate]);
+    for (const occurrence of [{ date: dueDate, state: "renewed", color: "emerald" }, { date: nextDueDate, state: "due-soon", color: "amber" }]) {
+      await setInput('input[aria-label="日历月份"]', occurrence.date.slice(0, 7));
+      await waitFor((id, login, date, state, color) => {
+        const key = "subscription:" + id + ":" + date;
+        const entries = [...document.querySelectorAll("[data-calendar-entry]")].filter(entry => entry.getAttribute("data-calendar-record-id") === id && entry.getAttribute("data-calendar-occurrence-date") === date);
+        if (entries.length !== 1 || entries[0].getAttribute("data-calendar-entry") !== key || entries[0].getAttribute("data-renewal-state") !== state || !entries[0].className.includes(color) || !entries[0].textContent.includes(login)) return false;
+        const table = document.querySelector('table[aria-label="本月全部续费"]');
+        const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].filter(row => row.getAttribute("data-renewal-kind") === "subscription" && row.getAttribute("data-renewal-id") === id && row.getAttribute("data-renewal-date") === date);
+        if (rows.length !== 1 || rows[0].getAttribute("data-renewal-state") !== state || !rows[0].querySelector("td:first-child span")?.className.includes(color)) return false;
+        const action = rows[0].lastElementChild;
+        return state === "renewed" ? action.textContent.trim() === "✓ 已续费" && action.querySelectorAll("button").length === 0
+          : [...action.querySelectorAll("button")].some(button => button.textContent.trim() === "已续费" && !button.disabled);
+      }, "calendar retains completed and pending occurrences with their colors", 20000, [recordId, account, occurrence.date, occurrence.state, occurrence.color]);
+    }
+  }
   const suffix = crypto.randomUUID().slice(0, 8);
   const customerName = `UI Synthetic customer ${suffix}`, subscriptionName = `UI Synthetic subscription ${suffix}`;
   const sidebarCustomerName = `UI Sidebar customer ${suffix}`;
@@ -171,9 +193,9 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     // Check each real due-date month instead of inventing an in-month deadline.
     for (const fixture of calendarFixtures) {
       await setInput('input[aria-label="日历月份"]', fixture.endDate.slice(0, 7));
-      await waitFor((recordId, account, month) => document.querySelector('input[aria-label="日历月份"]').value === month &&
-        [...document.querySelectorAll("[data-calendar-entry]")].some(entry => entry.getAttribute("data-calendar-entry") === "subscription:" + recordId && entry.textContent.includes(account)),
-      "calendar shows actual account and due date", 20000, [fixture.id, fixture.account, fixture.endDate.slice(0, 7)]);
+      await waitFor((recordId, account, dueDate) => document.querySelector('input[aria-label="日历月份"]').value === dueDate.slice(0, 7) &&
+        [...document.querySelectorAll("[data-calendar-entry]")].some(entry => entry.getAttribute("data-calendar-entry") === "subscription:" + recordId + ":" + dueDate && entry.getAttribute("data-calendar-record-id") === recordId && entry.getAttribute("data-calendar-occurrence-date") === dueDate && entry.textContent.includes(account)),
+      "calendar shows actual account and due date", 20000, [fixture.id, fixture.account, fixture.endDate]);
     }
     await click("本月");
     await waitFor(month => document.querySelector('input[aria-label="日历月份"]').value === month, "calendar returns to current month", 20000, [today.slice(0, 7)]);
@@ -191,10 +213,10 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     const near = calendarFixtures[0];
     await setInput('input[aria-label="日历月份"]', near.endDate.slice(0, 7));
     await setInput('input[aria-label="搜索续费账号"]', near.account);
-    await waitFor(recordId => {
+    await waitFor((recordId, dueDate) => {
       const entries = [...document.querySelectorAll("[data-calendar-entry]")];
-      return entries.length === 1 && entries[0].getAttribute("data-calendar-entry") === "subscription:" + recordId && entries[0].textContent.includes("near@example.test");
-    }, "calendar account search filters all other events", 20000, [near.id]);
+      return entries.length === 1 && entries[0].getAttribute("data-calendar-entry") === "subscription:" + recordId + ":" + dueDate && entries[0].getAttribute("data-calendar-record-id") === recordId && entries[0].getAttribute("data-calendar-occurrence-date") === dueDate && entries[0].textContent.includes("near@example.test");
+    }, "calendar account search filters all other events", 20000, [near.id, near.endDate]);
     assert.equal(await evaluate(() => document.querySelector('table[aria-label="已逾期"]').textContent.includes("late@example.test")), false, "Risk lists ignored account search");
     const nextMonth = new Date(near.endDate.slice(0, 7) + "-01T00:00:00Z"); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
     await evaluate(() => document.querySelector('button[aria-label="下一月"]').click());
@@ -204,6 +226,56 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     await click("本月");
     await waitFor(month => document.querySelector('input[aria-label="日历月份"]').value === month, "calendar restores current month after search", 20000, [today.slice(0, 7)]);
     steps.push("renewal-calendar-all-accounts-and-risk-list");
+    const beforeCalendarRenewal = await snapshot(), originalNear = beforeCalendarRenewal.subscriptions.find(row => row.id === near.id);
+    assert.ok(originalNear, "Original calendar renewal subscription missing");
+    assert.equal(originalNear.data.endDate, near.endDate);
+    assert.equal(originalNear.data.calendarHistory?.length ?? 0, 0);
+    const priorCostIds = beforeCalendarRenewal.entries.filter(row => row.data.type === "cost").map(row => row.id);
+    const priorReceiptCount = beforeCalendarRenewal.entries.filter(row => row.data.type === "receipt").length;
+    const nextNearDate = dateOffset(2);
+    const originalRenewalPayload = { kind: "subscription", id: near.id, dueDate: near.endDate, expectedRevision: originalNear.revision };
+    await evaluate((recordId, dueDate) => {
+      const table = document.querySelector('table[aria-label="即将到期"]');
+      const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].filter(row => row.getAttribute("data-renewal-kind") === "subscription" && row.getAttribute("data-renewal-id") === recordId && row.getAttribute("data-renewal-date") === dueDate);
+      if (rows.length !== 1) throw new Error("Original calendar renewal row is not unique");
+      const buttons = [...rows[0].lastElementChild.querySelectorAll("button")].filter(button => button.textContent.trim() === "已续费" && !button.disabled);
+      if (buttons.length !== 1) throw new Error("Original calendar renewal action is unavailable");
+      buttons[0].click(); buttons[0].click();
+    }, near.id, near.endDate);
+    await waitFor(async (recordId, nextDate, costCount, receiptCount) => {
+      const response = await fetch("/api/operations/snapshot", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Renewal snapshot failed: ${response.status}`);
+      const value = (await response.json()).snapshot, renewed = value.subscriptions.find(row => row.id === recordId);
+      return renewed?.data.endDate === nextDate && renewed.data.calendarHistory?.length === 1 && value.entries.filter(row => row.data.type === "cost").length === costCount + 1 && value.entries.filter(row => row.data.type === "receipt").length === receiptCount;
+    }, "double-click renews once and records one actual cost without receipts", 20000, [near.id, nextNearDate, priorCostIds.length, priorReceiptCount]);
+    const afterCalendarRenewal = await snapshot(), renewedNear = afterCalendarRenewal.subscriptions.find(row => row.id === near.id);
+    const nearHistory = renewedNear.data.calendarHistory[0];
+    assert.equal(renewedNear.data.startDate, near.endDate);
+    assert.equal(renewedNear.data.endDate, nextNearDate);
+    assert.equal(nearHistory.dueDate, near.endDate); assert.equal(nearHistory.nextDueDate, nextNearDate);
+    assert.equal(nearHistory.kind, "subscription"); assert.equal(nearHistory.subscriptionId, near.id); assert.equal(nearHistory.account, near.account);
+    const expectedRenewalCommand = "calendar-renew:" + crypto.createHash("sha256").update("subscription:" + near.id + ":" + near.endDate).digest("hex");
+    assert.equal(nearHistory.commandId, expectedRenewalCommand, "Calendar UI did not retain its stable occurrence command ID");
+    const addedCosts = afterCalendarRenewal.entries.filter(row => row.data.type === "cost" && !priorCostIds.includes(row.id));
+    assert.equal(addedCosts.length, 1); assert.equal(addedCosts[0].id, "entry:" + nearHistory.commandId);
+    assert.equal(addedCosts[0].data.subscriptionId, near.id); assert.equal(addedCosts[0].data.amountMinor, 100); assert.equal(addedCosts[0].data.totalMinor, 100);
+    assert.equal(addedCosts[0].data.periodStart, near.endDate); assert.equal(addedCosts[0].data.periodEnd, nextNearDate);
+    await checkRenewedCalendar(near.id, near.account, near.endDate, nextNearDate);
+    const replay = await evaluate(async (commandId, payload) => {
+      const response = await fetch("/api/operations/commands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: commandId, type: "calendar.renew", payload }) });
+      const value = await response.json();
+      if (!response.ok) throw new Error(`Calendar renewal replay failed: ${response.status}`);
+      return value;
+    }, nearHistory.commandId, originalRenewalPayload);
+    assert.equal(replay.replayed, true, "Same calendar command was not replayed");
+    assert.equal(replay.snapshot.changeSeq, afterCalendarRenewal.changeSeq, "Replayed renewal created new changes");
+    assert.deepEqual(replay.snapshot.subscriptions.find(row => row.id === near.id), renewedNear);
+    assert.equal(replay.snapshot.entries.filter(row => row.data.type === "cost").length, priorCostIds.length + 1);
+    assert.equal(replay.snapshot.entries.filter(row => row.data.type === "receipt").length, priorReceiptCount);
+    await window.loadURL(new URL("/", url).href);
+    await checkRenewedCalendar(near.id, near.account, near.endDate, nextNearDate);
+    const reloadedNear = (await snapshot()).subscriptions.find(row => row.id === near.id);
+    assert.equal(reloadedNear.data.endDate, nextNearDate); assert.deepEqual(reloadedNear.data.calendarHistory, [nearHistory]);
     closing = true; window.destroy(); await restartBackend();
     window = createHiddenWindow(); onWindow(window); closing = false; monitor(window);
     const workspaceUrl = new URL("/workspace", url).href;
@@ -219,11 +291,17 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     await waitFor(() => [...document.querySelectorAll("nav button")].some(button => button.textContent === "今日工作台"), "workspace reload");
     data = await snapshot(); assert.ok(data.customers.some(row => row.id === customer.id)); assert.ok(data.entries.some(row => row.id === receipt.id));
     assert.ok(data.customers.some(row => row.id === sidebarCustomer.id), "Embedded customer did not survive restart");
-    for (const fixture of calendarFixtures) assert.ok(data.subscriptions.some(row => row.id === fixture.id && row.data.account === fixture.account && row.data.endDate === fixture.endDate), "Calendar renewal fixture did not survive restart");
+    for (const fixture of calendarFixtures) assert.ok(data.subscriptions.some(row => row.id === fixture.id && row.data.account === fixture.account && row.data.endDate === (fixture.id === near.id ? nextNearDate : fixture.endDate)), "Calendar renewal fixture did not survive restart");
+    assert.deepEqual(data.subscriptions.find(row => row.id === near.id).data.calendarHistory, [nearHistory], "Calendar history changed across restart");
+    assert.equal(data.entries.filter(row => row.data.type === "cost").length, priorCostIds.length + 1);
+    assert.equal(data.entries.filter(row => row.data.type === "receipt").length, priorReceiptCount);
     const restartedActor = await evaluate(async () => (await (await fetch("/api/operations/access", { cache: "no-store" })).json()).actor);
     assert.equal(restartedActor.role, "admin");
     assert.equal(await evaluate(() => !!document.querySelector("input[name=key],#setup-form")), false);
     steps.push("backend-window-restart-owner-auto-entry-data-persistence");
+    await window.loadURL(new URL("/", url).href);
+    await checkRenewedCalendar(near.id, near.account, near.endDate, nextNearDate);
+    steps.push("calendar-renewal-button-history-colors-and-idempotency");
     assert.deepEqual(errors, []);
     const result = { status: "ok", visibleWindow: false, steps, navigationRetries, consoleErrors: [] };
     fs.writeFileSync(path.join(userData, "ui-smoke-result.json"), JSON.stringify(result, null, 2));

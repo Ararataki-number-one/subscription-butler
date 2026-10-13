@@ -7,8 +7,8 @@ import { insertSpaceWithMother } from "@/db/spaces";
 import { insertChildAccount } from "@/db/childAccounts";
 import { motherAccount } from "@/db/schema";
 import { OperationsStore } from "@/db/operations";
-import type { CustomerData, LegacyLink, OperationsSnapshot, OpsKind, OpsRecord, RentalData, SlotData, SubscriptionData } from "../operations/types";
-import { filterRenewalCalendarEntries, overdueRenewalEntries, renewalCalendarEntries, upcomingRenewalEntries } from "./renewal-calendar";
+import type { CalendarRenewalEvent, CustomerData, LegacyLink, OperationsSnapshot, OpsKind, OpsRecord, RentalData, SlotData, SubscriptionData } from "../operations/types";
+import { filterRenewalCalendarEntries, overdueRenewalEntries, renewalCalendarEntries, renewalCalendarOccurrenceKey, renewalCalendarStatus, upcomingRenewalEntries } from "./renewal-calendar";
 
 const metadata = { tags: [], group: "", note: "" };
 const period = { unit: "month", count: 1 } as const;
@@ -24,6 +24,11 @@ const slot = (id: string, subscriptionId: string, data: Partial<SlotData> = {}) 
 const rental = (id: string, subscriptionId: string, slotId: string, data: Partial<RentalData> = {}) => record<RentalData>(id, "rental", {
   ...metadata, subscriptionId, slotId, customerId: "customer", usage: "rented", startDate: "2026-10-01", endDate: "2026-10-13", billing: { amountMinor: 1000, currency: "USD", period }, status: "active", periodVersion: 1,
   history: [{ type: "join", date: "2026-10-01", commandId: "synthetic", periodVersion: 1, toSlotId: slotId }], ...data,
+});
+const renewal = (kind: CalendarRenewalEvent["kind"], subscriptionId: string, data: Partial<CalendarRenewalEvent> = {}): CalendarRenewalEvent => ({
+  kind, subscriptionId, dueDate: "2026-10-13", nextDueDate: "2026-11-13", completedAt: "2026-10-05T02:00:00Z", commandId: "synthetic-renewal",
+  name: "Original service", service: "ChatGPT", planName: "Original plan", account: "original-account", customerName: kind === "rental" ? "Original customer" : "",
+  role: kind === "subscription" ? "订阅续费" : "旧成员标签", amountMinor: 1800, currency: "USD", feePercent: kind === "subscription" ? "2.5" : "0", ...data,
 });
 function snapshot(): OperationsSnapshot {
   return { version: 1, changeSeq: 0, channels: [], customers: [record<CustomerData>("customer", "customer", { ...metadata, name: "Synthetic customer", contact: "", email: "", archived: false })],
@@ -123,5 +128,128 @@ describe("classic renewal calendar", () => {
     for (const days of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) expect(upcomingRenewalEntries(entries, "2028-02-27", days)).toEqual([]);
     expect(upcomingRenewalEntries(entries, "2028-02-30")).toEqual([]);
     expect(overdueRenewalEntries(entries, "not-a-date")).toEqual([]);
+  });
+
+  it("keeps completed subscription snapshots beside the next pending term after current identity and price edits", () => {
+    const value = snapshot();
+    value.subscriptions = [subscription("subscription", { name: "Edited service", account: "edited-account", amountMinor: 9900, currency: "CNY", feePercent: "8", endDate: "2026-11-13", calendarHistory: [renewal("subscription", "subscription")] })];
+    const before = structuredClone(value), entries = renewalCalendarEntries(value);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ date: "2026-10-13", completed: true, name: "Original service", planName: "Original plan", account: "original-account", amountMinor: 1800, currency: "USD", feePercent: "2.5", role: "订阅续费", completedAt: "2026-10-05T02:00:00Z", nextDueDate: "2026-11-13", historyCommandId: "synthetic-renewal" });
+    expect(entries[1]).toMatchObject({ date: "2026-11-13", completed: false, name: "Edited service", account: "edited-account", amountMinor: 9900, currency: "CNY", feePercent: "8" });
+    expect(filterRenewalCalendarEntries(entries, { month: "2026-10", search: "original-account Original" })).toEqual([entries[0]]);
+    expect(entries.map(renewalCalendarOccurrenceKey)).toEqual(["subscription:subscription:2026-10-13", "subscription:subscription:2026-11-13"]);
+    expect(value).toEqual(before);
+    value.subscriptions[0].data.status = "disabled";
+    expect(renewalCalendarEntries(value)).toEqual([entries[0]]);
+  });
+
+  it("retains an original rental snapshot after switching parents and losing its old inventory", () => {
+    const value = snapshot();
+    value.subscriptions = [subscription("current-parent")];
+    value.slots = [slot("current-slot", "current-parent", { account: "edited-account", label: "新位置", kind: "child" })];
+    value.customers[0].data.name = "Edited customer";
+    value.rentals = [rental("term", "current-parent", "current-slot", { endDate: "2026-11-13", calendarHistory: [renewal("rental", "original-parent", { slotId: "removed-slot", slotLabel: "原母号", slotKind: "mother", role: "原母号标签", usage: "rented", amountMinor: 3600, currency: "CNY" })] })];
+    const entries = renewalCalendarEntries(value), historical = entries.find(entry => entry.completed)!;
+    expect(historical).toMatchObject({ kind: "rental", recordId: "term", subRecordId: "original-parent", name: "Original service", account: "original-account", customerName: "Original customer", role: "原母号标签", slotKind: "mother", slotId: "removed-slot", amountMinor: 3600, currency: "CNY", feePercent: "0" });
+    expect(entries.find(entry => entry.kind === "rental" && !entry.completed)).toMatchObject({ subRecordId: "current-parent", account: "edited-account", customerName: "Edited customer" });
+    value.rentals[0].data.status = "ended";
+    value.subscriptions[0].data.status = "disabled";
+    value.slots = [];
+    expect(renewalCalendarEntries(value)).toEqual([historical]);
+  });
+
+  it("merges repeated occurrence dates with explicit completion first and invents no pending next date", () => {
+    const value = snapshot(); value.subscriptions = [subscription("subscription")]; value.slots = [slot("slot", "subscription")];
+    const frozen = renewal("rental", "subscription");
+    value.rentals = [rental("term", "subscription", "slot", { history: [
+      { type: "join", date: "2026-10-01", commandId: "join", periodVersion: 1, toSlotId: "slot" },
+      { type: "renew", date: "2026-10-05", commandId: "old-renew", periodVersion: 2, periodStart: "2026-10-13", periodEnd: "2026-11-13" },
+    ], calendarHistory: [frozen, { ...frozen, commandId: "duplicate-renew", account: "duplicate-account" }] })];
+    const entries = renewalCalendarEntries(value), occurrences = entries.filter(entry => entry.recordId === "term");
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0]).toMatchObject({ completed: true, date: "2026-10-13", historyCommandId: "synthetic-renewal", account: "original-account", amountMinor: 1800 });
+    expect(entries.some(entry => entry.date === "2026-11-13")).toBe(false);
+    expect(new Set(entries.map(renewalCalendarOccurrenceKey)).size).toBe(entries.length);
+  });
+
+  it("derives only stored old month-end terms and keeps consecutive early renewals beside the current term", () => {
+    const value = snapshot(); value.subscriptions = [subscription("subscription")]; value.slots = [slot("slot", "subscription")];
+    value.rentals = [rental("term", "subscription", "slot", { endDate: "2027-03-31", periodVersion: 3, history: [
+      { type: "join", date: "2027-01-01", commandId: "legacy-join", periodVersion: 1 },
+      { type: "renew", date: "2027-01-15", commandId: "early-one", periodVersion: 2, periodStart: "2027-01-31", periodEnd: "2027-02-28" },
+      { type: "renew", date: "2027-01-15", commandId: "early-two", periodVersion: 3, periodStart: "2027-02-28", periodEnd: "2027-03-31" },
+    ] })];
+    const entries = renewalCalendarEntries(value).filter(entry => entry.kind === "rental");
+    expect(entries.map(entry => [entry.date, entry.completed])).toEqual([["2027-01-31", true], ["2027-02-28", true], ["2027-03-31", false]]);
+    expect(entries.slice(0, 2).map(entry => entry.completedAt)).toEqual(["2027-01-15", "2027-01-15"]);
+    expect(entries.slice(0, 2).every(entry => entry.amountMinor === undefined && entry.currency === undefined && entry.feePercent === undefined)).toBe(true);
+    expect(entries[1].nextDueDate).toBe("2027-03-31");
+    expect(filterRenewalCalendarEntries(entries, { month: "2027-02" })).toEqual([entries[1]]);
+    expect(entries[2].amountMinor).toBe(1000);
+  });
+
+  it("replays the original inventory at each old renewal and preserves completed terms after exit and disable", () => {
+    const value = snapshot();
+    value.subscriptions = [subscription("old-parent", { status: "disabled" }), subscription("new-parent")];
+    value.slots = [slot("old-slot", "old-parent", { status: "disabled", account: "original-mother", kind: "mother", label: "原母号" }), slot("new-slot", "new-parent", { account: "new-child" })];
+    value.rentals = [rental("term", "new-parent", "new-slot", { endDate: "2027-04-30", periodVersion: 3, history: [
+      { type: "join", date: "2027-01-01", commandId: "legacy-join", periodVersion: 1 },
+      { type: "renew", date: "2027-01-10", commandId: "old-parent-renew", periodVersion: 2, periodStart: "2027-02-28", periodEnd: "2027-03-31" },
+      { type: "switch", date: "2027-01-15", commandId: "switch-parent", periodVersion: 2, fromSlotId: "old-slot", toSlotId: "new-slot" },
+      { type: "renew", date: "2027-01-16", commandId: "new-parent-renew", periodVersion: 3, periodStart: "2027-03-31", periodEnd: "2027-04-30" },
+    ] })];
+    const historical = renewalCalendarEntries(value).filter(entry => entry.kind === "rental" && entry.completed);
+    expect(historical[0]).toMatchObject({ date: "2027-02-28", subRecordId: "old-parent", slotId: "old-slot", account: "original-mother", slotKind: "mother" });
+    expect(historical[1]).toMatchObject({ date: "2027-03-31", subRecordId: "new-parent", slotId: "new-slot", account: "new-child" });
+    value.rentals[0].data.status = "ended";
+    value.subscriptions[1].data.status = "disabled";
+    value.slots[1].data.status = "disabled";
+    expect(renewalCalendarEntries(value)).toEqual(historical);
+  });
+
+  it("does not guess completed terms from manual date edits or incomplete old renewal records", () => {
+    const value = snapshot(); value.subscriptions = [subscription("subscription", { endDate: "2026-12-25" })]; value.slots = [slot("slot", "subscription")];
+    value.rentals = [rental("term", "subscription", "slot", { endDate: "2027-01-13", history: [
+      { type: "join", date: "2026-10-01", commandId: "join", periodVersion: 1, toSlotId: "slot" },
+      { type: "renew", date: "2026-10-05", commandId: "missing-range", periodVersion: 2 },
+      { type: "renew", date: "2026-10-05", commandId: "invalid-date", periodVersion: 3, periodStart: "2026-02-30", periodEnd: "2026-03-31" },
+      { type: "renew", date: "2026-10-05", commandId: "empty-range", periodVersion: 4, periodStart: "2026-10-13", periodEnd: "2026-10-13" },
+    ] })];
+    const entries = renewalCalendarEntries(value);
+    expect(entries.map(entry => entry.date)).toEqual(["2026-12-25", "2027-01-13"]);
+    expect(entries.every(entry => !entry.completed)).toBe(true);
+  });
+
+  it("does not attribute an old renewal to the current parent when its historical slot is missing", () => {
+    const value = snapshot(); value.subscriptions = [subscription("current-parent")]; value.slots = [slot("current-slot", "current-parent")];
+    value.rentals = [rental("term", "current-parent", "current-slot", { endDate: "2026-11-13", history: [
+      { type: "join", date: "2026-10-01", commandId: "join", periodVersion: 1, toSlotId: "removed-slot" },
+      { type: "renew", date: "2026-10-05", commandId: "old-renew", periodVersion: 2, periodStart: "2026-10-13", periodEnd: "2026-11-13" },
+      { type: "switch", date: "2026-10-06", commandId: "switch", periodVersion: 2, fromSlotId: "removed-slot", toSlotId: "current-slot" },
+    ] })];
+    const entries = renewalCalendarEntries(value);
+    expect(entries.filter(entry => entry.kind === "rental")).toMatchObject([{ completed: false, date: "2026-11-13", subRecordId: "current-parent" }]);
+    expect(entries.some(entry => entry.completed)).toBe(false);
+  });
+
+  it.each([
+    { date: "2026-10-30", completed: false, expected: "overdue" },
+    { date: "2026-10-31", completed: false, expected: "due-today" },
+    { date: "2026-11-07", completed: false, expected: "due-soon" },
+    { date: "2026-11-08", completed: false, expected: "upcoming" },
+    { date: "2026-10-01", completed: true, expected: "renewed" },
+    { date: "2027-01-01", completed: true, expected: "renewed" },
+  ])("classifies $date completed=$completed as $expected independently of past due dates", ({ date, completed, expected }) => {
+    expect(renewalCalendarStatus({ date, completed }, "2026-10-31")).toBe(expected);
+  });
+
+  it("keeps unverified dates neutral and permits a today-only upcoming window", () => {
+    expect(renewalCalendarStatus({ date: "2026-11-01", completed: false }, "2026-10-31", 0)).toBe("upcoming");
+    expect(renewalCalendarStatus({ date: "2026-10-31", completed: false }, "2026-10-31", 0)).toBe("due-today");
+    expect(renewalCalendarStatus({ date: "2026-02-30", completed: false }, "2026-10-31")).toBe("upcoming");
+    expect(renewalCalendarStatus({ date: "2026-10-01", completed: false }, "invalid")).toBe("upcoming");
+    expect(renewalCalendarStatus({ date: "2026-11-01", completed: false }, "2026-10-31", NaN)).toBe("upcoming");
+    expect(renewalCalendarStatus({ date: "2026-10-01", completed: true }, "invalid")).toBe("renewed");
   });
 });

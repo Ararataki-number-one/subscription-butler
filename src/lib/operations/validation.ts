@@ -3,7 +3,7 @@ import { OperationsError } from "./errors";
 import { freezeUsdMinor } from "@/lib/money";
 import { paymentFee } from "@/lib/payment-fees";
 import { crossMinor, date } from "./utils";
-import type { BillData, EntryData, OpsData, OpsKind, RentalData } from "./types";
+import type { BillData, EntryData, OpsData, OpsKind, RentalData, SubscriptionData } from "./types";
 
 const minor = z.number().int().nonnegative().safe();
 const text = z.string().max(10000);
@@ -14,12 +14,13 @@ const period = z.object({ unit: z.enum(["day", "month", "quarter", "year"]), cou
 const legacy = z.object({ sources: z.array(ref).max(1000), fingerprint: ref, managedFields: z.array(ref), detachedFields: z.array(ref).optional(), present: z.boolean(), conflict: text.optional() }).strict().optional();
 const metadata = { tags: z.array(text).max(100), group: text, note: text, externalKey: text.optional(), legacy, channelId: z.union([z.number().int().positive(), ref]).optional(), channelName: text.optional() };
 const fx = z.object({ rateToUsd: rate, rateToCny: rate.nullable(), cnyRateToUsd: rate.nullable().optional(), quoteDate: ref, fetchedAt: ref, source: ref, minorUnit: z.number().int().min(0).max(8) }).strict();
+const calendarHistory = z.array(z.object({ dueDate: day, nextDueDate: day, completedAt: z.string().datetime(), commandId: ref, kind: z.enum(["subscription", "rental"]), subscriptionId: ref, name: ref, service: ref, planName: text, account: text, customerName: text, role: ref, amountMinor: minor, currency: ref, feePercent: text, slotId: ref.optional(), slotLabel: text.optional(), slotKind: z.enum(["mother", "child", "member", "generic"]).optional(), usage: z.enum(["rented", "self"]).optional() }).strict()).max(10000).optional();
 const schemas = {
   customer: z.object({ ...metadata, name: ref, contact: text, email: text, archived: z.boolean() }).strict(),
   template: z.object({ ...metadata, name: ref, service: ref, planName: text, capacity: z.number().int().min(1).max(1000), currency: ref, amountMinor: minor, feePercent: text, period, allocation: z.enum(["daily", "fixed", "fixed-amount"]) }).strict(),
-  subscription: z.object({ ...metadata, name: ref, service: ref, planName: text, account: text, templateId: ref.optional(), countryCode: z.string().regex(/^[A-Z]{2}$/).optional(), openingDate: day.optional(), currency: ref, amountMinor: minor, feePercent: text, period, cycleAnchorDay: z.number().int().min(1).max(31).optional(), startDate: day, endDate: day, status: z.enum(["active", "disabled"]), allocation: z.enum(["daily", "fixed", "fixed-amount"]) }).strict(),
+  subscription: z.object({ ...metadata, name: ref, service: ref, planName: text, account: text, templateId: ref.optional(), countryCode: z.string().regex(/^[A-Z]{2}$/).optional(), openingDate: day.optional(), currency: ref, amountMinor: minor, feePercent: text, period, cycleAnchorDay: z.number().int().min(1).max(31).optional(), startDate: day, endDate: day, status: z.enum(["active", "disabled"]), allocation: z.enum(["daily", "fixed", "fixed-amount"]), calendarHistory }).strict(),
   slot: z.object({ ...metadata, subscriptionId: ref, label: ref, account: text, kind: z.enum(["mother", "child", "member", "generic"]), weight: z.number().int().positive().safe(), fixedCostMinor: minor.optional(), status: z.enum(["available", "disabled"]) }).strict(),
-  rental: z.object({ ...metadata, subscriptionId: ref, slotId: ref, customerId: ref.optional(), usage: z.enum(["rented", "self"]), startDate: day, endDate: day, cycleAnchorDay: z.number().int().min(1).max(31).optional(), billing: z.object({ amountMinor: minor, currency: ref, period }).strict(), status: z.enum(["active", "ended"]), periodVersion: z.number().int().positive().safe(), history: z.array(z.object({ type: z.enum(["join", "renew", "exit", "switch"]), date: day, commandId: ref, fromSlotId: ref.optional(), toSlotId: ref.optional(), reason: text.optional(), periodVersion: z.number().int().positive().safe(), periodStart: day.optional(), periodEnd: day.optional() }).strict()).min(1).max(10000) }).strict(),
+  rental: z.object({ ...metadata, subscriptionId: ref, slotId: ref, customerId: ref.optional(), usage: z.enum(["rented", "self"]), startDate: day, endDate: day, cycleAnchorDay: z.number().int().min(1).max(31).optional(), billing: z.object({ amountMinor: minor, currency: ref, period }).strict(), status: z.enum(["active", "ended"]), periodVersion: z.number().int().positive().safe(), history: z.array(z.object({ type: z.enum(["join", "renew", "exit", "switch"]), date: day, commandId: ref, fromSlotId: ref.optional(), toSlotId: ref.optional(), reason: text.optional(), periodVersion: z.number().int().positive().safe(), periodStart: day.optional(), periodEnd: day.optional() }).strict()).min(1).max(10000), calendarHistory }).strict(),
   bill: z.object({ ...metadata, subscriptionId: ref, rentalId: ref.optional(), customerId: ref.optional(), startDate: day, endDate: day, dueDate: day, amountMinor: minor, discountMinor: minor, currency: ref, usdMinor: minor, cnyMinor: minor.nullable(), fx, status: z.enum(["open", "void"]), reason: text.optional() }).strict(),
   entry: z.object({ ...metadata, type: z.enum(["receipt", "refund", "cost"]), subscriptionId: ref.optional(), rentalId: ref.optional(), customerId: ref.optional(), billId: ref.optional(), sourceEntryId: ref.optional(), amountMinor: minor, currency: ref, feePercent: text, feeAmountMinor: minor, totalMinor: minor, usdMinor: minor, cnyMinor: minor.nullable(), fx, billFx: z.object({ currency: ref, minorUnit: z.number().int().min(0).max(8), rateToUsd: rate }).strict().optional(), costAllocation: z.object({ mode: z.enum(["daily", "fixed", "fixed-amount"]), slots: z.array(z.object({ slotId: ref, weight: z.number().int().positive().safe(), fixedCostMinor: minor.optional() }).strict()).max(1000), fixedShares: z.array(z.object({ slotId: ref, usdMinor: minor, cnyMinor: minor.nullable() }).strict()).max(1000).optional() }).strict().optional(), date: day, periodStart: day.optional(), periodEnd: day.optional(), appliedMinor: minor.optional(), status: z.enum(["posted", "void"]), reason: text.optional() }).strict(),
 };
@@ -28,6 +29,14 @@ export function validateRecord(kind: OpsKind, value: OpsData) {
   if (!parsed.success) throw new OperationsError("validation", `记录 ${kind} 格式无效：${parsed.error.issues.slice(0, 3).map(issue => issue.path.join(".") + " " + issue.message).join("；")}`);
   const currency = "currency" in value ? value.currency : undefined;
   if (currency && !/^[A-Z]{3}$/.test(currency)) throw new OperationsError("validation", "币种格式无效。");
+  if (kind === "subscription" || kind === "rental") {
+    const history = (value as SubscriptionData | RentalData).calendarHistory ?? [];
+    if (new Set(history.map(event => event.commandId)).size !== history.length) throw new OperationsError("validation", "续费历史操作编号不能重复。");
+    for (const event of history) {
+      if (event.kind !== kind || event.nextDueDate <= event.dueDate || !/^[A-Z]{3}$/.test(event.currency)) throw new OperationsError("validation", "续费历史日期、类型或币种无效。");
+      paymentFee(event.amountMinor, event.feePercent);
+    }
+  }
   if (kind === "subscription" || kind === "template") {
     const data = value as { amountMinor: number; feePercent: string; startDate?: string; endDate?: string };
     paymentFee(data.amountMinor, data.feePercent);

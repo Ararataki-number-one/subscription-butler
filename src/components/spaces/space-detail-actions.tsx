@@ -27,6 +27,7 @@ import type { SpaceFormValue } from "./space-form";
 
 type SpaceDetailActionsProps = {
   space: SpaceFormValue;
+  expiryDate?: string | null;
   childCount: number;
   isEditing?: boolean;
   editFormId?: string;
@@ -34,6 +35,7 @@ type SpaceDetailActionsProps = {
 
 export function SpaceDetailActions({
   space,
+  expiryDate,
   childCount,
   isEditing = false,
   editFormId,
@@ -48,7 +50,7 @@ export function SpaceDetailActions({
 
     startRenewTransition(async () => {
       try {
-        const res = await renewSpace(space.id!);
+        const res = await renewSpace(space.id!, expiryDate ?? undefined);
         if (res.ok) {
           toast.success("已续费并更新到期日");
           setRenewOpen(false);

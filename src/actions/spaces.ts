@@ -8,6 +8,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { accountReceipt, childAccount } from "@/db/schema";
 import { db } from "@/db";
+import { OperationsError, OperationsStore } from "@/db/operations";
 import { getChannel } from "@/db/channels";
 import { getCurrencyMinorUnit } from "@/db/currencies";
 import { getRate } from "@/db/fxRates";
@@ -302,7 +303,7 @@ export async function updateSpace(
   return { ok: true };
 }
 
-export async function renewSpace(id: number): Promise<SpaceActionResult> {
+export async function renewSpace(id: number, expectedDueDate?: string): Promise<SpaceActionResult> {
   if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   const parsedId = spaceIdSchema.safeParse({ id });
   if (!parsedId.success) {
@@ -344,15 +345,20 @@ export async function renewSpace(id: number): Promise<SpaceActionResult> {
     count: periodCount,
   });
 
-  updateSpaceRow(db, parsedId.data.id, {
-    currentPeriodStartDate,
-    expiryDate,
-    rateUsed: snapshot.rateUsed,
-    rateAsOf: snapshot.rateAsOf,
-    rateSource: snapshot.rateSource,
-    amountUsd: snapshot.amountUsd,
-    baseAmountUsd: snapshot.baseAmountUsd, feePercent: snapshot.feePercent, feeAmountMinor: snapshot.feeAmountMinor,
-  });
+  try {
+    new OperationsStore(db.$client).renewClassicSource({ kind: "subscription", source: `space:${parsedId.data.id}`,
+      expectedDueDate: expectedDueDate ?? existing.space.expiryDate ?? undefined, update: () => updateSpaceRow(db, parsedId.data.id, {
+        currentPeriodStartDate,
+        expiryDate,
+        rateUsed: snapshot.rateUsed,
+        rateAsOf: snapshot.rateAsOf,
+        rateSource: snapshot.rateSource,
+        amountUsd: snapshot.amountUsd,
+        baseAmountUsd: snapshot.baseAmountUsd, feePercent: snapshot.feePercent, feeAmountMinor: snapshot.feeAmountMinor,
+      }) });
+  } catch (error) {
+    return { ok: false, error: error instanceof OperationsError ? error.message : "续费失败，请重试。" };
+  }
 
   revalidateSpace(parsedId.data.id);
   return { ok: true };

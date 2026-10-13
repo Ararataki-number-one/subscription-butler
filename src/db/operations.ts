@@ -1,13 +1,13 @@
 import type Database from "better-sqlite3";
 import { freezeUsdMinor } from "@/lib/money";
 import { paymentFee } from "@/lib/payment-fees";
-import { assertOperationsAccess, canReadRecord, filterOperationsSnapshot } from "@/lib/operations/access";
+import { assertOperationsAccess, canReadRecord, filterOperationsSnapshot, redactCustomerRecord } from "@/lib/operations/access";
 import { OperationsError } from "@/lib/operations/errors";
 import { validateRecord } from "@/lib/operations/validation";
 import { legacyCandidates } from "@/lib/operations/legacy";
 import { billBalance, buildOperationsReport, calculatePricing } from "@/lib/operations/report";
 import { addPeriod, canonical, crossMinor, date, fingerprint, integer, invalid, metadata, period, periodValueForRange, range, rentalIntervals, required, shanghaiToday, text } from "@/lib/operations/utils";
-import type { BillData, CustomerData, EntryData, FrozenFx, FxQuote, OpsActor, OpsAudit, OpsChange, OpsCommand, OpsData, OpsKind, OpsRecord, OpsResult, OperationsSnapshot, RentalData, ReplicaCommand, ReportOptions, SlotData, SubscriptionData, TemplateData } from "@/lib/operations/types";
+import type { BillData, CalendarRenewalEvent, CustomerData, EntryData, FrozenFx, FxQuote, LegacyLink, OpsActor, OpsAudit, OpsChange, OpsCommand, OpsData, OpsKind, OpsRecord, OpsResult, OperationsSnapshot, RentalData, ReplicaCommand, ReportOptions, SlotData, SubscriptionData, TemplateData } from "@/lib/operations/types";
 
 export { OperationsError } from "@/lib/operations/errors";
 export type { OpsActor, OpsCommand, OperationsSnapshot, OpsRecord, OpsResult } from "@/lib/operations/types";
@@ -17,7 +17,7 @@ type Context = { id: string; actor: OpsActor; type: string; changed: Set<string>
 const decode = (row: DbRecord): OpsRecord => ({ id: row.id, kind: row.kind, data: JSON.parse(row.data), revision: row.revision, updatedAt: row.updated_at });
 const today = shanghaiToday;
 
-/** Transactional operational ledger. Reads old tables, but never rewrites them. */
+/** Transactional ledger; only explicit calendar renewal projects owned legacy dates. */
 export class OperationsStore {
   constructor(public readonly sqlite: Database.Database) {
     const priorOwnerTable = sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ops_legacy_owner'").get();
@@ -79,7 +79,7 @@ export class OperationsStore {
     integer(afterSeq, "变更序号"); integer(limit, "数量", 1); if (limit > 5000) invalid("一次最多读取 5000 条变更。");
     const snapshot = this.snapshot(actor);
     const rows = this.sqlite.prepare("SELECT * FROM ops_change WHERE seq>? ORDER BY seq LIMIT ?").all(afterSeq, limit) as { seq: number; command_id: string; record_id: string; kind: OpsKind; record_json: string; created_at: string }[];
-    return rows.map(row => ({ seq: row.seq, commandId: row.command_id, recordId: row.record_id, kind: row.kind, record: JSON.parse(row.record_json) as OpsRecord, createdAt: row.created_at })).filter(change => canReadRecord(actor, change.record, snapshot)).map(change => actor.role === "customer" ? { ...change, record: { ...change.record, data: { ...change.record.data, tags: [], group: "", note: "", externalKey: undefined, legacy: undefined, channelId: undefined, channelName: undefined } } } : change);
+    return rows.map(row => ({ seq: row.seq, commandId: row.command_id, recordId: row.record_id, kind: row.kind, record: JSON.parse(row.record_json) as OpsRecord, createdAt: row.created_at })).filter(change => canReadRecord(actor, change.record, snapshot)).map(change => actor.role === "customer" ? { ...change, record: redactCustomerRecord(change.record) } : change);
   }
   audit(limit = 100, actor: OpsActor = ADMIN): OpsAudit[] {
     if (actor.role === "customer" || actor.role === "read-only") throw new OperationsError("forbidden", "无权读取审计记录。");
@@ -106,6 +106,158 @@ export class OperationsStore {
   }
   private detach<T extends OpsData>(data: T, fields: string[]): T {
     return data.legacy ? { ...data, legacy: { ...data.legacy, managedFields: data.legacy.managedFields.filter(field => !fields.includes(field)), detachedFields: [...new Set([...(data.legacy.detachedFields ?? []), ...fields])] } } : data;
+  }
+  private calendarEvent(record: OpsRecord<SubscriptionData | RentalData>, nextDueDate: string, context: Context, amountMinor: number, currency: string, feePercent: string): CalendarRenewalEvent {
+    const rental = record.kind === "rental" ? record.data as RentalData : undefined;
+    const subscription = rental ? this.get<SubscriptionData>(rental.subscriptionId, "subscription") : record as OpsRecord<SubscriptionData>;
+    const slot = rental ? this.get<SlotData>(rental.slotId, "slot") : undefined;
+    return { dueDate: record.data.endDate, nextDueDate, completedAt: new Date().toISOString(), commandId: context.id,
+      kind: rental ? "rental" : "subscription", subscriptionId: subscription.id, name: subscription.data.name, service: subscription.data.service, planName: subscription.data.planName,
+      account: slot?.data.account.trim() || subscription.data.account.trim(), customerName: rental?.customerId ? this.get<CustomerData>(rental.customerId, "customer").data.name : "",
+      role: slot?.data.label ?? "订阅续费", amountMinor, currency, feePercent,
+      ...(slot && rental ? { slotId: slot.id, slotLabel: slot.data.label, slotKind: slot.data.kind, usage: rental.usage } : {}) };
+  }
+  /** Only an explicit classic renewal may add completion history to a source update. */
+  renewClassicSource(input: { kind: "subscription" | "rental"; source: string; expectedDueDate?: string; update: () => unknown }, actor: OpsActor = ADMIN): { ok: true; replayed: boolean } {
+    const sourcePattern = input.kind === "subscription" ? /^space:[1-9]\d*$/ : /^(mother_account|child_account):[1-9]\d*$/;
+    if (!sourcePattern.test(input.source)) invalid("经典续费来源无效。");
+    assertOperationsAccess(actor, { id: "classic-renewal", type: "classic.renew", payload: { source: input.source } });
+    return this.sqlite.transaction(() => {
+      this.syncLegacy();
+      const candidates = legacyCandidates(this.sqlite);
+      const matches = candidates.filter(row => row.kind === input.kind && row.data.legacy?.sources.includes(input.source));
+      const conflict = () => { throw new OperationsError("conflict", "经典页面的来源或到期日已变化，请刷新后再续费。"); };
+      if (matches.length !== 1) conflict();
+      const candidate = matches[0], record = this.get<SubscriptionData | RentalData>(candidate.id, input.kind);
+      const owned = (id: string) => !!this.sqlite.prepare("SELECT 1 FROM ops_legacy_owner WHERE record_id=?").get(id);
+      const validSource = (current: OpsRecord, source: typeof candidate | undefined) => owned(current.id) && !!source
+        && !!current.data.legacy?.present && !current.data.legacy.conflict
+        && canonical([...current.data.legacy.sources].sort()) === canonical([...source.data.legacy!.sources].sort())
+        && !this.sqlite.prepare("SELECT 1 FROM ops_legacy_conflict WHERE record_id=?").get(current.id);
+      if (!validSource(record, candidate)) conflict();
+      const expectedDueDate = date(input.expectedDueDate ?? (candidate.data as SubscriptionData | RentalData).endDate, "原到期日");
+      const command: OpsCommand = { id: `classic-renew:${fingerprint({ kind: input.kind, recordId: record.id, dueDate: expectedDueDate })}`,
+        type: "classic.renew", payload: { kind: input.kind, id: record.id, dueDate: expectedDueDate } };
+      const hash = fingerprint({ command, actor: actor.id });
+      const replay = this.sqlite.prepare("SELECT hash FROM ops_command WHERE id=?").get(command.id) as { hash: string } | undefined;
+      if (replay) {
+        if (replay.hash !== hash) throw new OperationsError("idempotency", "同一经典续费不能用于不同执行者。");
+        return { ok: true as const, replayed: true };
+      }
+      if (record.data.status !== "active" || record.data.endDate !== expectedDueDate
+        || (candidate.data as SubscriptionData | RentalData).endDate !== expectedDueDate
+        || !record.data.legacy!.managedFields.includes("endDate") || record.data.legacy!.detachedFields?.includes("endDate")
+        || record.data.calendarHistory?.some(event => event.dueDate === expectedDueDate)) conflict();
+      const rental = input.kind === "rental" ? record.data as RentalData : undefined;
+      if (rental) {
+        const subscription = this.get<SubscriptionData>(rental.subscriptionId, "subscription"), slot = this.get<SlotData>(rental.slotId, "slot");
+        const sourceRental = candidate.data as RentalData;
+        if (rental.usage !== "rented" || slot.data.status !== "available" || subscription.data.status !== "active"
+          || rental.slotId !== sourceRental.slotId || rental.subscriptionId !== sourceRental.subscriptionId
+          || slot.data.subscriptionId !== subscription.id || !validSource(slot, candidates.find(row => row.id === slot.id))
+          || !validSource(subscription, candidates.find(row => row.id === subscription.id))) conflict();
+      }
+      const context: Context = { id: command.id, actor, type: command.type, changed: new Set() };
+      const original = this.calendarEvent(record, expectedDueDate, context, 0, "CNY", "0");
+      const updated = input.update();
+      if (updated && typeof updated === "object" && "then" in updated) invalid("经典续费必须使用同步事务更新。");
+      this.syncLegacy();
+      const after = this.get<SubscriptionData | RentalData>(record.id, input.kind);
+      const updatedCandidate = legacyCandidates(this.sqlite).find(row => row.id === record.id && row.kind === input.kind);
+      if (!validSource(after, updatedCandidate)) conflict();
+      const current = updatedCandidate!.data as SubscriptionData | RentalData;
+      const nextDueDate = date(current.endDate, "下一到期日");
+      if (nextDueDate <= expectedDueDate || after.data.endDate !== nextDueDate) conflict();
+      const subscription = input.kind === "subscription" ? current as SubscriptionData : undefined;
+      const billing = input.kind === "rental" ? (current as RentalData).billing : undefined;
+      const event: CalendarRenewalEvent = { ...original, nextDueDate, amountMinor: subscription?.amountMinor ?? billing!.amountMinor,
+        currency: subscription?.currency ?? billing!.currency, feePercent: subscription?.feePercent ?? "0" };
+      const data = { ...after.data, calendarHistory: [...(after.data.calendarHistory ?? []), event] };
+      validateRecord(input.kind, data);
+      this.write(input.kind, record.id, data, context, after.revision);
+      this.auditWrite(context, "经典页面明确续费，保留原到期日和本期账号信息；没有自动登记收款。");
+      this.sqlite.prepare("INSERT INTO ops_command(id,hash,result,actor_id,created_at) VALUES(?,?,?,?,?)")
+        .run(command.id, hash, JSON.stringify([...context.changed]), actor.id, new Date().toISOString());
+      return { ok: true as const, replayed: false };
+    }).immediate();
+  }
+  /** Legacy source identities come from the actual local bridge, never guessed IDs. */
+  private projectCalendarDate(record: OpsRecord<SubscriptionData | RentalData>, nextDueDate: string): LegacyLink | undefined {
+    const owned = (id: string) => !!this.sqlite.prepare("SELECT 1 FROM ops_legacy_owner WHERE record_id=?").get(id);
+    if (!owned(record.id)) return undefined;
+    const conflict = () => { throw new OperationsError("conflict", "旧页面的来源或到期日已变化，请核对后刷新再续费。"); };
+    const candidates = legacyCandidates(this.sqlite);
+    const candidate = candidates.find(row => row.id === record.id && row.kind === record.kind);
+    const matches = (current: LegacyLink | undefined, source: LegacyLink | undefined) => !!current?.present && !current.conflict && !!source && canonical([...current.sources].sort()) === canonical([...source.sources].sort());
+    if (!candidate || !matches(record.data.legacy, candidate.data.legacy) || this.sqlite.prepare("SELECT 1 FROM ops_legacy_conflict WHERE record_id=?").get(record.id) || (candidate.data as SubscriptionData | RentalData).endDate !== record.data.endDate) conflict();
+    const sourceId = (source: string, table: "space" | "mother_account" | "child_account") => {
+      const match = new RegExp("^" + table + ":([1-9]\\d*)$").exec(source);
+      const id = match ? Number(match[1]) : NaN;
+      if (!Number.isSafeInteger(id)) conflict();
+      return id;
+    };
+    const subscription = record.kind === "subscription" ? record as OpsRecord<SubscriptionData> : this.get<SubscriptionData>((record.data as RentalData).subscriptionId, "subscription");
+    const sourceSub = candidates.find(row => row.id === subscription.id && row.kind === "subscription");
+    if (!owned(subscription.id) || !sourceSub || !matches(subscription.data.legacy, sourceSub.data.legacy) || subscription.data.legacy!.sources.length !== 1 || this.sqlite.prepare("SELECT 1 FROM ops_legacy_conflict WHERE record_id=?").get(subscription.id)) conflict();
+    const spaceId = sourceId(subscription.data.legacy!.sources[0], "space");
+    if (record.kind === "subscription") {
+      const current = record.data as SubscriptionData, source = candidate!.data as SubscriptionData;
+      const currentAnchor = current.cycleAnchorDay ?? Number(current.startDate.slice(8, 10)), sourceAnchor = source.cycleAnchorDay ?? Number(source.startDate.slice(8, 10));
+      if (canonical(current.period) !== canonical(source.period) || currentAnchor !== sourceAnchor) throw new OperationsError("conflict", "旧页面的续费周期或锚点与当前记录不一致，请核对后再续费。");
+      const original = this.sqlite.prepare("SELECT current_period_start_date,expiry_date FROM space WHERE id=?").get(spaceId) as { current_period_start_date: string | null; expiry_date: string | null } | undefined;
+      if (!original || original.expiry_date !== record.data.endDate || (candidate!.data as SubscriptionData).startDate !== record.data.startDate) conflict();
+      const result = this.sqlite.prepare("UPDATE space SET current_period_start_date=?,expiry_date=? WHERE id=? AND expiry_date=? AND current_period_start_date IS ?").run(record.data.endDate, nextDueDate, spaceId, record.data.endDate, original!.current_period_start_date);
+      if (result.changes !== 1) conflict();
+    } else {
+      const rental = record.data as RentalData, sourceRental = candidate!.data as RentalData;
+      const currentAnchor = rental.cycleAnchorDay ?? Number((rental.legacy ? rental.endDate : rental.startDate).slice(8, 10)), sourceAnchor = sourceRental.cycleAnchorDay ?? Number((sourceRental.legacy ? sourceRental.endDate : sourceRental.startDate).slice(8, 10));
+      if (canonical(rental.billing.period) !== canonical(sourceRental.billing.period) || currentAnchor !== sourceAnchor) throw new OperationsError("conflict", "旧页面的租期周期或锚点与当前记录不一致，请核对后再续费。");
+      const slot = this.get<SlotData>(rental.slotId, "slot"), sourceSlot = candidates.find(row => row.id === slot.id && row.kind === "slot");
+      if (!owned(slot.id) || !sourceSlot || !matches(slot.data.legacy, sourceSlot.data.legacy) || slot.data.subscriptionId !== subscription.id || sourceRental.slotId !== slot.id || sourceRental.subscriptionId !== subscription.id || !matches(record.data.legacy, slot.data.legacy) || this.sqlite.prepare("SELECT 1 FROM ops_legacy_conflict WHERE record_id=?").get(slot.id)) conflict();
+      const sources = [...new Set(record.data.legacy!.sources)];
+      if (!sources.length) conflict();
+      const originals = sources.map(source => {
+        const table = source.startsWith("mother_account:") ? "mother_account" : source.startsWith("child_account:") ? "child_account" : undefined;
+        if (!table) conflict();
+        const id = sourceId(source, table!);
+        const original = this.sqlite.prepare(`SELECT space_id,email,usage_status,next_payment_date FROM ${table} WHERE id=?`).get(id) as { space_id: number; email: string; usage_status: string | null; next_payment_date: string | null } | undefined;
+        if (!original || original.space_id !== spaceId) conflict();
+        return { table: table!, id, ...original! };
+      });
+      const mother = originals.find(row => row.table === "mother_account");
+      if (mother && originals.some(row => row.email.trim().toLowerCase() !== mother.email.trim().toLowerCase())) conflict();
+      // The bridge uses the mother when rented/self, otherwise the first live
+      // merged child. Unused aliases may have null/stale dates; all refer to
+      // that same physical account and receive the canonical next date once.
+      const occupied = (row: typeof originals[number]) => row.usage_status === "rented" || row.usage_status === "self";
+      const primary = mother ? occupied(mother) ? mother : originals.find(row => row.table === "child_account" && occupied(row)) ?? mother : originals[0];
+      if (primary.next_payment_date !== rental.endDate) conflict();
+      for (const original of originals) {
+        // table is one of two fixed names; every observed source date and ID
+        // remains a bound condition, including an unused alias's NULL date.
+        const result = this.sqlite.prepare(`UPDATE ${original.table} SET next_payment_date=? WHERE id=? AND space_id=? AND next_payment_date IS ?`).run(nextDueDate, original.id, spaceId, original.next_payment_date);
+        if (result.changes !== 1) conflict();
+      }
+    }
+    const refreshed = legacyCandidates(this.sqlite).find(row => row.id === record.id && row.kind === record.kind)?.data.legacy;
+    if (!refreshed) conflict();
+    const fields = record.kind === "subscription" ? ["startDate", "endDate"] : ["endDate"];
+    return { ...record.data.legacy!, fingerprint: refreshed!.fingerprint, managedFields: [...new Set([...record.data.legacy!.managedFields.filter(field => field !== "calendarHistory"), ...fields])], detachedFields: (record.data.legacy!.detachedFields ?? []).filter(field => !fields.includes(field)) };
+  }
+  private calendarRenew(command: OpsCommand, context: Context) {
+    const p = command.payload;
+    if (p.kind !== "subscription" && p.kind !== "rental") invalid("请选择订阅或租期续费。");
+    const record = this.get<SubscriptionData | RentalData>(required(p.id, "续费记录"), p.kind); this.expected(command, record);
+    if (date(p.dueDate, "原到期日") !== record.data.endDate || record.data.calendarHistory?.some(event => event.dueDate === p.dueDate)) throw new OperationsError("conflict", "此到期日已经续费或已变化，请刷新后重试。");
+    if (record.data.status !== "active") invalid("已停用或退出的记录不能续费。");
+    const rental = p.kind === "rental" ? record.data as RentalData : undefined;
+    const subscription = record.data as SubscriptionData;
+    const anchor = rental ? rental.cycleAnchorDay ?? Number((rental.legacy ? rental.endDate : rental.startDate).slice(8, 10)) : subscription.cycleAnchorDay ?? Number(subscription.startDate.slice(8, 10));
+    const nextDueDate = addPeriod(record.data.endDate, rental ? rental.billing.period : subscription.period, anchor);
+    const link = this.projectCalendarDate(record, nextDueDate);
+    const renewal = { ...command, payload: { id: record.id, expectedRevision: record.revision, ...(rental ? { expectedPeriod: rental.periodVersion } : { expectedEndDate: record.data.endDate }) } };
+    if (rental) this.renewRental(renewal, context, link);
+    else this.renewSubscription(renewal, context, link);
   }
   private claimLegacyFields(id: string, kind: OpsKind, fields: string[], context: Context) {
     const record = this.get(id, kind);
@@ -148,7 +300,7 @@ export class OperationsStore {
           continue;
         }
         const next = { ...current.data } as OpsData & Record<string, unknown>;
-        for (const key of link.managedFields) if (!link.detachedFields?.includes(key)) next[key] = candidateData[key];
+        for (const key of link.managedFields) if (key !== "calendarHistory" && !link.detachedFields?.includes(key)) next[key] = candidateData[key];
         for (const key of backfillFields) next[key] = candidateData[key];
         next.legacy = { ...link, managedFields: [...new Set([...link.managedFields, ...backfillFields])], sources: candidate.data.legacy!.sources, fingerprint: candidate.data.legacy!.fingerprint, present: true };
         this.write(candidate.kind, candidate.id, next, context, current.revision);
@@ -204,6 +356,7 @@ export class OperationsStore {
     return { usdMinor, cnyMinor, fx: { rateToUsd: quote.rateToUsd, rateToCny: cny ? (Number(quote.rateToUsd) / Number(cny.rateToUsd)).toFixed(18).replace(/0+$/, "").replace(/\.$/, "") : null, cnyRateToUsd: cny?.rateToUsd ?? null, quoteDate: quote.quoteDate, fetchedAt: quote.fetchedAt, source: quote.source, minorUnit: quote.minorUnit } };
   }
   private save(command: OpsCommand, context: Context, kind: "customer" | "template" | "subscription" | "slot") {
+    if ("calendarHistory" in command.payload) invalid("续费历史只能由续费操作追加，不能手工改写。");
     const payload = Object.fromEntries(Object.entries(command.payload).filter(([, value]) => value !== undefined)); const id = text(payload.id) || `${kind}:${command.id}`; const prior = this.find(id) ? this.get(id, kind) : undefined;
     if (prior) this.expected(command, prior);
     const previous = prior?.data as OpsData & Record<string, unknown> | undefined;
@@ -234,7 +387,7 @@ export class OperationsStore {
         const endDate = date(payload.endDate ?? (prior && payload.period === undefined && payload.startDate === undefined ? merged.endDate : undefined) ?? addPeriod(startDate, common.period, cycleAnchorDay));
         const countryCode = text(merged.countryCode).toUpperCase(); if (countryCode && !/^[A-Z]{2}$/.test(countryCode)) invalid("国家代码需为两位英文字母。");
         const openingDate = text(merged.openingDate) ? date(merged.openingDate, "首次开通日") : undefined;
-        data = { ...common, ...range(startDate, endDate), cycleAnchorDay, ...(countryCode ? { countryCode } : {}), ...(openingDate ? { openingDate } : {}), account: text(merged.account), ...(merged.templateId ? { templateId: text(merged.templateId) } : {}), status: merged.status === "disabled" ? "disabled" : "active" };
+        data = { ...common, ...range(startDate, endDate), cycleAnchorDay, ...(countryCode ? { countryCode } : {}), ...(openingDate ? { openingDate } : {}), account: text(merged.account), ...(merged.templateId ? { templateId: text(merged.templateId) } : {}), status: merged.status === "disabled" ? "disabled" : "active", ...((prior?.data as SubscriptionData | undefined)?.calendarHistory ? { calendarHistory: (prior!.data as SubscriptionData).calendarHistory } : {}) };
       }
     }
     data = this.detach(data, Object.keys(payload));
@@ -249,18 +402,18 @@ export class OperationsStore {
   private occupied(slotId: string, startDate: string, endDate: string, exclude?: string) {
     return this.snapshotRaw().rentals.some(row => row.id !== exclude && rentalIntervals(row.data).some(interval => interval.slotId === slotId && interval.startDate < endDate && interval.endDate > startDate));
   }
-  private issueBill(payload: Record<string, unknown>, context: Context, id = `bill:${context.id}`) {
+  private issueBill(payload: Record<string, unknown>, context: Context, id = `bill:${context.id}`, preserveClassicBindings = false) {
     const rental = payload.rentalId ? this.get<RentalData>(text(payload.rentalId), "rental") : undefined;
     const subscriptionId = required(payload.subscriptionId ?? rental?.data.subscriptionId, "订阅 ID"); const subscription = this.get<SubscriptionData>(subscriptionId, "subscription");
     if (rental && subscriptionId !== rental.data.subscriptionId) invalid("账单订阅与租赁不一致。");
     const customerId = text(payload.customerId ?? rental?.data.customerId) || undefined;
     if (customerId) this.get(customerId, "customer");
-    if (rental) {
+    if (rental && !preserveClassicBindings) {
       this.claimLegacyFields(rental.id, "rental", ["customerId", "usage", "slotId", "subscriptionId", "startDate", "status"], context);
       this.claimLegacyFields(rental.data.slotId, "slot", ["status"], context);
       this.claimLegacyFields(rental.data.subscriptionId, "subscription", ["status"], context);
     }
-    if (customerId) this.claimLegacyFields(customerId, "customer", ["archived"], context);
+    if (customerId && !preserveClassicBindings) this.claimLegacyFields(customerId, "customer", ["archived"], context);
     const currency = this.currency(payload.currency ?? payload.currencyCode ?? rental?.data.billing.currency);
     const amountMinor = integer(payload.amountMinor ?? rental?.data.billing.amountMinor ?? 0, "应收金额");
     const interval = range(payload.startDate ?? rental?.data.startDate, payload.endDate ?? rental?.data.endDate);
@@ -286,7 +439,7 @@ export class OperationsStore {
     this.write("rental", id, data, context, 0);
     if (usage === "rented") this.issueBill({ ...p, rentalId: id, startDate, endDate }, context, `bill:${context.id}:${id}`);
   }
-  private renewRental(command: OpsCommand, context: Context) {
+  private renewRental(command: OpsCommand, context: Context, calendarLink?: LegacyLink) {
     const p = command.payload; const record = this.get<RentalData>(required(p.id, "租赁 ID"), "rental"); this.expected(command, record);
     if (p.expectedPeriod !== record.data.periodVersion) throw new OperationsError("conflict", "租期已续，请刷新后再操作。");
     if (record.data.status !== "active") invalid("已退出的租赁不能续期，请重新加入。");
@@ -296,12 +449,30 @@ export class OperationsStore {
     const startDate = record.data.endDate; const endDate = addPeriod(startDate, billing.period, cycleAnchorDay);
     if (this.occupied(record.data.slotId, startDate, endDate, record.id)) throw new OperationsError("conflict", "下一租期位置已被占用。");
     const periodVersion = record.data.periodVersion + 1;
-    this.claimLegacyFields(slot.id, "slot", ["status"], context);
-    this.claimLegacyFields(sub.id, "subscription", ["status"], context);
-    if (record.data.customerId) this.claimLegacyFields(record.data.customerId, "customer", ["archived"], context);
-    const data = this.detach({ ...record.data, billing, endDate, cycleAnchorDay, periodVersion, history: [...record.data.history, { type: "renew" as const, date: date(p.date ?? today()), periodStart: startDate, periodEnd: endDate, commandId: context.id, periodVersion }] }, ["billing", "endDate", "cycleAnchorDay", "periodVersion", "history", "customerId", "usage", "slotId", "subscriptionId", "startDate", "status"]);
+    if (!calendarLink) {
+      this.claimLegacyFields(slot.id, "slot", ["status"], context);
+      this.claimLegacyFields(sub.id, "subscription", ["status"], context);
+      if (record.data.customerId) this.claimLegacyFields(record.data.customerId, "customer", ["archived"], context);
+    }
+    const data = this.detach({ ...record.data, billing, endDate, cycleAnchorDay, periodVersion, calendarHistory: [...(record.data.calendarHistory ?? []), this.calendarEvent(record, endDate, context, billing.amountMinor, billing.currency, "0")], history: [...record.data.history, { type: "renew" as const, date: date(p.date ?? today()), periodStart: startDate, periodEnd: endDate, commandId: context.id, periodVersion }] }, ["billing", "endDate", "cycleAnchorDay", "periodVersion", "history", "calendarHistory", "customerId", "usage", "slotId", "subscriptionId", "startDate", "status"]);
+    if (calendarLink) data.legacy = { ...calendarLink,
+      managedFields: calendarLink.managedFields.filter(field => !["history", "periodVersion", "calendarHistory"].includes(field)),
+      detachedFields: [...new Set([...(calendarLink.detachedFields ?? []), "history", "periodVersion", "calendarHistory"])] };
     this.write("rental", record.id, data, context, record.revision);
-    if (data.usage === "rented") this.issueBill({ rentalId: record.id, startDate, endDate, dueDate: p.dueDate ?? startDate, amountMinor: billing.amountMinor, currency: billing.currency }, context, `bill:${record.id}:${periodVersion}`);
+    if (data.usage === "rented") this.issueBill({ rentalId: record.id, startDate, endDate, dueDate: p.dueDate ?? startDate, amountMinor: billing.amountMinor, currency: billing.currency }, context, `bill:${record.id}:${periodVersion}`, !!calendarLink);
+  }
+  private renewSubscription(command: OpsCommand, context: Context, calendarLink?: LegacyLink) {
+    const p = command.payload, record = this.get<SubscriptionData>(required(p.id, "订阅 ID"), "subscription"); this.expected(command, record); if (record.data.status !== "active") invalid("订阅已停用。");
+    if (p.expectedEndDate !== undefined && p.expectedEndDate !== record.data.endDate) throw new OperationsError("conflict", "订阅期次已变化。");
+    const term = period(p.period, record.data.period), cycleAnchorDay = record.data.cycleAnchorDay ?? Number(record.data.startDate.slice(8, 10)), startDate = record.data.endDate, endDate = addPeriod(startDate, term, cycleAnchorDay);
+    const amountMinor = p.amountMinor === undefined ? record.data.amountMinor : integer(p.amountMinor, "金额"), currency = this.currency(p.currency, record.data.currency), feePercent = text(p.feePercent, record.data.feePercent);
+    const next = this.detach({ ...record.data, startDate, endDate, cycleAnchorDay, period: term, amountMinor, currency, feePercent,
+      calendarHistory: [...(record.data.calendarHistory ?? []), this.calendarEvent(record, endDate, context, amountMinor, currency, feePercent)] }, ["startDate", "endDate", "cycleAnchorDay", "period", "amountMinor", "currency", "feePercent", "status", "calendarHistory"]);
+    if (calendarLink) next.legacy = { ...calendarLink,
+      managedFields: calendarLink.managedFields.filter(field => field !== "calendarHistory"),
+      detachedFields: [...new Set([...(calendarLink.detachedFields ?? []), "calendarHistory"])] };
+    this.write("subscription", record.id, next, context, record.revision);
+    this.cost({ ...command, payload: { ...p, subscriptionId: record.id, amountMinor, currency, feePercent, periodStart: startDate, periodEnd: endDate } }, context);
   }
   private exitRental(command: OpsCommand, context: Context) {
     const p = command.payload; const record = this.get<RentalData>(required(p.id, "租赁 ID"), "rental"); this.expected(command, record);
@@ -373,6 +544,7 @@ export class OperationsStore {
         this.write("customer", record.id, this.detach({ ...record.data, archived: true }, ["archived"]), context, record.revision); break;
       }
       case "rental.join": this.join(command, context); break;
+      case "calendar.renew": this.calendarRenew(command, context); break;
       case "rental.renew": this.renewRental(command, context); break;
       case "rental.exit": this.exitRental(command, context); break;
       case "rental.switch": {
@@ -389,14 +561,7 @@ export class OperationsStore {
         const ids = new Set<string>();
         for (const item of p.items as Record<string, unknown>[]) { const id = required(item.id, "租赁 ID"); if (ids.has(id)) invalid("同一批次不能重复续期一个租赁。"); ids.add(id); this.renewRental({ ...command, payload: { ...item, ...(p.period ? { period: p.period } : {}) } }, context); } break;
       }
-      case "subscription.renew": {
-        const record = this.get<SubscriptionData>(required(p.id, "订阅 ID"), "subscription"); this.expected(command, record); if (record.data.status !== "active") invalid("订阅已停用。");
-        if (p.expectedEndDate !== undefined && p.expectedEndDate !== record.data.endDate) throw new OperationsError("conflict", "订阅期次已变化。");
-        const term = period(p.period, record.data.period); const cycleAnchorDay = record.data.cycleAnchorDay ?? Number(record.data.startDate.slice(8, 10)); const startDate = record.data.endDate; const endDate = addPeriod(startDate, term, cycleAnchorDay);
-        const next = this.detach({ ...record.data, startDate, endDate, cycleAnchorDay, period: term, amountMinor: p.amountMinor === undefined ? record.data.amountMinor : integer(p.amountMinor, "金额"), currency: this.currency(p.currency, record.data.currency), feePercent: text(p.feePercent, record.data.feePercent) }, ["startDate", "endDate", "cycleAnchorDay", "period", "amountMinor", "currency", "feePercent", "status"]);
-        this.write("subscription", record.id, next, context, record.revision);
-        this.cost({ ...command, payload: { ...p, subscriptionId: record.id, amountMinor: next.amountMinor, currency: next.currency, feePercent: next.feePercent, periodStart: startDate, periodEnd: endDate } }, context); break;
-      }
+      case "subscription.renew": this.renewSubscription(command, context); break;
       case "subscription.disable": case "slot.disable": {
         const kind = command.type.split(".")[0] as "slot" | "subscription"; const record = this.get<SlotData | SubscriptionData>(required(p.id, "记录 ID"), kind); this.expected(command, record); const reason = required(p.reason, "停用原因");
         const active = this.snapshotRaw().rentals.filter(row => row.data.status === "active" && (kind === "slot" ? row.data.slotId === record.id : row.data.subscriptionId === record.id));
@@ -471,6 +636,10 @@ export class OperationsStore {
         integer(row.expectedRevision, "预期版本"); if (row.sourceRevision !== undefined) integer(row.sourceRevision, "来源版本", 1);
         const prior = this.find(row.id);
         validateRecord(row.kind, row.data);
+        if (prior && (row.kind === "subscription" || row.kind === "rental")) {
+          const before = (decode(prior).data as SubscriptionData | RentalData).calendarHistory ?? [], after = (row.data as SubscriptionData | RentalData).calendarHistory ?? [];
+          if (after.length < before.length || canonical(after.slice(0, before.length)) !== canonical(before)) throw new OperationsError("immutable", "不能删除或改写已确认续费历史。");
+        }
         if (prior && row.kind === "rental") {
           const before = decode(prior).data as RentalData; const after = row.data as RentalData;
           if (after.periodVersion < before.periodVersion || after.history.length < before.history.length || canonical(after.history.slice(0, before.history.length)) !== canonical(before.history)) throw new OperationsError("immutable", "不能删除或改写租赁历史。");
@@ -500,6 +669,11 @@ export class OperationsStore {
     const snapshot = this.snapshotRaw();
     for (const row of this.all()) {
       validateRecord(row.kind, row.data);
+      if (row.kind === "subscription" || row.kind === "rental") for (const event of (row.data as SubscriptionData | RentalData).calendarHistory ?? []) {
+        this.get(event.subscriptionId, "subscription");
+        if (row.kind === "subscription" && event.subscriptionId !== row.id) invalid("续费历史订阅归属不一致。");
+        this.currency(event.currency);
+      }
       if ("currency" in row.data) {
         const currency = this.sqlite.prepare("SELECT minor_unit FROM currency WHERE code=?").get(row.data.currency) as { minor_unit: number } | undefined;
         if (!currency) invalid("记录币种未登记。");

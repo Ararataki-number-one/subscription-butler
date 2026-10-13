@@ -552,7 +552,7 @@ export function ChildAccountTable({
 
     startRenewTransition(async () => {
       try {
-        const res = await renewChildAccount(renewTarget.id);
+        const res = await renewChildAccount(renewTarget.id, renewTarget.nextPaymentDate ?? undefined);
         if (res.ok) {
           toast.success("已续费，状态已恢复正常");
           setRenewTarget(null);

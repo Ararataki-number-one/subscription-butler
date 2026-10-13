@@ -132,10 +132,10 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
     startTransition(async () => {
       try {
         const result = confirmation.role === "mother"
-          ? await renewMotherAccount(earnings.spaceId)
+          ? await renewMotherAccount(earnings.spaceId, motherDue ?? undefined)
           : confirmation.action === "delete"
           ? await deleteChildAccount(confirmation.account.childAccount.id)
-          : await renewChildAccount(confirmation.account.childAccount.id);
+          : await renewChildAccount(confirmation.account.childAccount.id, confirmation.account.childAccount.nextPaymentDate ?? undefined);
         if (!result.ok) { toast.error(result.error); return; }
         toast.success(confirmation.action === "delete" ? "成员记录已删除" : "付款周期已更新");
         setConfirmation(null); router.refresh();

@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { OperationsError, OperationsStore } from "@/db/operations";
 import { motherAccount, childAccount } from "@/db/schema";
 import { getSpaceDetail } from "@/db/spaces";
 import { getCurrencyMinorUnit } from "@/db/currencies";
@@ -118,7 +119,7 @@ export async function updateTeamSeat(input: unknown): Promise<{ ok: true } | { o
   return { ok: true };
 }
 
-export async function renewMotherAccount(spaceId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function renewMotherAccount(spaceId: number, expectedDueDate?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!(await hasAdminSession())) return { ok: false, error: "登录状态已失效，请重新登录。" };
   if (!z.number().int().positive().safeParse(spaceId).success) return { ok: false, error: "无效的订阅。" };
   const owner = getSpaceDetail(db, spaceId);
@@ -128,13 +129,18 @@ export async function renewMotherAccount(spaceId: number): Promise<{ ok: true } 
   const mother = owner.motherAccount;
   if (mother.usageStatus !== "rented") return { ok: false, error: "只有出租中的账号需要推进收款周期。" };
   if (!mother.joinedDate || !mother.monthlyPaymentDay) return { ok: false, error: "请先编辑账号，填写加入日期和付款日。" };
-  db.transaction(tx => {
-  tx.update(motherAccount).set({
-    nextPaymentDate: renewPaymentDueDate(mother.monthlyPaymentDay!,
-      { unit: mother.billingPeriodUnit as PeriodUnit, count: mother.billingPeriodCount }, mother.nextPaymentDate),
-  }).where(eq(motherAccount.id, mother.id)).run();
-  syncMotherRecord(tx, spaceId);
-  });
+  try {
+    new OperationsStore(db.$client).renewClassicSource({ kind: "rental", source: `mother_account:${mother.id}`,
+      expectedDueDate: expectedDueDate ?? mother.nextPaymentDate ?? undefined, update: () => db.transaction(tx => {
+        tx.update(motherAccount).set({
+          nextPaymentDate: renewPaymentDueDate(mother.monthlyPaymentDay!,
+            { unit: mother.billingPeriodUnit as PeriodUnit, count: mother.billingPeriodCount }, mother.nextPaymentDate),
+        }).where(eq(motherAccount.id, mother.id)).run();
+        syncMotherRecord(tx, spaceId);
+      }) });
+  } catch (error) {
+    return { ok: false, error: error instanceof OperationsError ? error.message : "续费失败，请重试。" };
+  }
   revalidatePath("/"); revalidatePath("/spaces"); revalidatePath(`/spaces/${spaceId}`);
   return { ok: true };
 }

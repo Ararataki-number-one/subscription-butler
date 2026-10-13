@@ -145,6 +145,7 @@ export default async function SpaceDetailPage({
         <div className="col-start-2 row-start-1 flex items-center gap-2 justify-self-end sm:col-start-3">
           <SpaceDetailActions
             space={formValue}
+            expiryDate={space.expiryDate}
             childCount={childAccounts.length}
             isEditing={isEditing}
             editFormId={editFormId}

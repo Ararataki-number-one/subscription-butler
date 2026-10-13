@@ -47,9 +47,14 @@ export function filterOperationsSnapshot(snapshot: OperationsSnapshot, actor: Op
   // A customer sees their own bill periods and receipts; account inventory and
   // subscription purchase costs stay server-side.
   const own = <T extends object>(rows: OpsRecord<T>[]) => rows.filter(record => canReadRecord(actor, record as OpsRecord, snapshot));
-  const clearPrivateNotes = <T extends object>(record: OpsRecord<T>) => ({ ...record, data: { ...record.data, tags: [], group: "", note: "", externalKey: undefined, legacy: undefined, channelId: undefined, channelName: undefined } });
+  const clearPrivateNotes = redactCustomerRecord;
   return { ...snapshot, ...( "channels" in snapshot ? { channels: [] } : {}), customers: own(snapshot.customers).map(clearPrivateNotes), templates: [], plans: [], subscriptions: [], slots: [], rentals: [],
     bills: own(snapshot.bills).map(clearPrivateNotes), entries: own(snapshot.entries).map(clearPrivateNotes) };
+}
+export function redactCustomerRecord<T extends object>(record: OpsRecord<T>): OpsRecord<T> {
+  const data = { ...record.data, tags: [], group: "", note: "", externalKey: undefined, legacy: undefined, channelId: undefined, channelName: undefined } as T & { calendarHistory?: unknown };
+  delete data.calendarHistory;
+  return { ...record, data };
 }
 
 export type AccessCredential = { id: string; label: string; role: OpsRole; customerId?: string; createdAt: string; expiresAt: string | null; revokedAt: string | null };
