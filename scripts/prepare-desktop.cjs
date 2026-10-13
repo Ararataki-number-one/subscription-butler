@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { execFileSync } = require("node:child_process");
 const writeSeed = require("./seed-data.cjs");
 const root = path.resolve(__dirname, "..");
@@ -67,13 +68,17 @@ server = server.replace(/const nextConfig = (\{[^\n]+\})\r?\n/, (_match, text) =
 fs.writeFileSync(serverFile, server);
 function sanitizePaths(directory) {
   const patterns = [root, root.replaceAll("\\", "/"), JSON.stringify(root).slice(1, -1)];
+  const home = os.homedir();
+  const homePatterns = [home, home.replaceAll("\\", "/"), JSON.stringify(home).slice(1, -1)];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) { sanitizePaths(file); continue; }
     if (!/\.(?:json|js|cjs|mjs|map)$/i.test(entry.name)) continue;
     let text = fs.readFileSync(file, "utf8");
     for (const pattern of patterns) text = text.split(pattern).join(".");
-    if (/[A-Z]:[/\\]+Users[/\\]+[^/\\]+/i.test(text)) throw new Error("Local workspace path remains in runtime: " + path.relative(runtime, file));
+    if (homePatterns.some(value => text.toLowerCase().includes(value.toLowerCase()))) {
+      throw new Error("Local home path remains in runtime: " + path.relative(runtime, file));
+    }
     fs.writeFileSync(file, text);
   }
 }
