@@ -17,7 +17,8 @@ import { listRates, upsertRates } from "@/db/fxRates";
 import { CURRENCY_SEED, seedCurrencies } from "@/db/seed";
 import { BCB_HTML } from "@/test/bcb-fixture";
 import { eq } from "drizzle-orm";
-import { fxRate, space } from "@/db/schema";
+import { currency, fxRate, space } from "@/db/schema";
+import { findRateSupportedCurrency } from "@/lib/currencies";
 import { insertSpaceWithMother } from "@/db/spaces";
 import { insertChannel } from "@/db/channels";
 
@@ -317,6 +318,36 @@ describe("frankfurter FX service (FX-01 / FX-03)", () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) =>
       url.includes("bcb.gob.bo") ? { ok: true, text: async () => "unavailable" }
         : { ok: true, json: async () => VALID_RESPONSE }));
+    expect((await refreshFromApi()).stale).toBe(true);
+    expect(listRates(ctx.db)).toEqual(before);
+  });
+
+  it.each(["USD", "CNY"] as const)("values EGP using a validated USD pair even with %s display base", async (base) => {
+    ctx.db.insert(currency).values(findRateSupportedCurrency("EGP")!).run();
+    const spy = vi.fn(async (url: string) => {
+      if (url.includes("bcb.gob.bo")) return { ok: true, text: async () => BCB_HTML };
+      if (url.includes("/v2/rate/")) return { ok: true, json: async () => ({ base: "USD", quote: "EGP", date: "2026-10-16", rate: 50 }) };
+      expect(url).not.toContain("EGP");
+      return { ok: true, json: async () => base === "USD" ? VALID_RESPONSE : VALID_CNY_RESPONSE };
+    });
+    vi.stubGlobal("fetch", spy);
+    const result = await refreshFromApi(base);
+    expect(result.stale).toBe(false);
+    expect(result.rates.find(row => row.rate.currencyCode === "EGP")?.rate).toMatchObject({ rateToUsd: "0.02", quoteDate: "2026-10-16", source: "frankfurter-v2" });
+    expect(spy).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    { base: "EGP", quote: "USD", date: "2026-10-16", rate: 50 },
+    { base: "USD", quote: "EGP", date: "2026-02-30", rate: 50 },
+    { base: "USD", quote: "EGP", date: "2026-10-16", rate: 0 },
+  ])("does not overwrite the cache with an invalid EGP quote: %j", async quote => {
+    ctx.db.insert(currency).values(findRateSupportedCurrency("EGP")!).run();
+    seedCache(ctx.db, "2026-06-20T00:00:00Z");
+    const before = listRates(ctx.db);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("bcb.gob.bo")
+      ? { ok: true, text: async () => BCB_HTML }
+      : { ok: true, json: async () => url.includes("/v2/rate/") ? quote : VALID_RESPONSE }));
     expect((await refreshFromApi()).stale).toBe(true);
     expect(listRates(ctx.db)).toEqual(before);
   });
