@@ -20,6 +20,7 @@ export const RATE_SUPPORTED_CURRENCIES = [
   { code: "BRL", name: "巴西雷亚尔", minorUnit: 2, symbol: "R$", countryCode: "BR", countryName: "巴西" },
   { code: "CAD", name: "加拿大元", minorUnit: 2, symbol: "CA$", countryCode: "CA", countryName: "加拿大" },
   { code: "CHF", name: "瑞士法郎", minorUnit: 2, symbol: "CHF", countryCode: "CH", countryName: "瑞士" },
+  { code: "CLP", name: "智利比索", minorUnit: 0, symbol: "CL$", countryCode: "CL", countryName: "智利" },
   { code: "CNY", name: "人民币", minorUnit: 2, symbol: "￥", countryCode: "CN", countryName: "中国" },
   { code: "CZK", name: "捷克克朗", minorUnit: 2, symbol: "Kč", countryCode: "CZ", countryName: "捷克" },
   { code: "DKK", name: "丹麦克朗", minorUnit: 2, symbol: "kr", countryCode: "DK", countryName: "丹麦" },
@@ -50,8 +51,8 @@ export const RATE_SUPPORTED_CURRENCIES = [
 ] as const satisfies readonly CurrencyMeta[];
 
 /** Default seeded currency list with authoritative minor-unit exponents. */
-// Enable EGP on demand: its v2 quote should only be requested by ledgers that use it.
-export const CURRENCIES = RATE_SUPPORTED_CURRENCIES.filter(currency => currency.code !== "EGP");
+// Enable v2 currencies on demand, requesting their quotes only for ledgers that use them.
+export const CURRENCIES = RATE_SUPPORTED_CURRENCIES.filter(currency => currency.code !== "EGP" && currency.code !== "CLP");
 
 export function findRateSupportedCurrency(
   code: string,

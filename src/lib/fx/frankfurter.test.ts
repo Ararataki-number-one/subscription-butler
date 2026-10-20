@@ -359,4 +359,32 @@ describe("frankfurter FX service (FX-01 / FX-03)", () => {
     expect((await refreshFromApi()).stale).toBe(true);
     expect(listRates(ctx.db)).toEqual(before);
   });
+
+  it.each(["USD", "CNY"] as const)("refreshes CLP and EGP together without mixing their USD pair quotes (%s)", async base => {
+    for (const code of ["CLP", "EGP"]) ctx.db.insert(currency).values(findRateSupportedCurrency(code)!).run();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("bcb.gob.bo")) return { ok: true, text: async () => BCB_HTML };
+      if (url.includes("/v2/rate/")) {
+        const quote = url.endsWith("CLP") ? "CLP" : "EGP";
+        return { ok: true, json: async () => ({ base: "USD", quote, date: "2026-10-19", rate: quote === "CLP" ? 1000 : 50 }) };
+      }
+      expect(url).not.toMatch(/CLP|EGP/);
+      return { ok: true, json: async () => base === "USD" ? VALID_RESPONSE : VALID_CNY_RESPONSE };
+    }));
+    const result = await refreshFromApi(base);
+    expect(result.stale).toBe(false);
+    expect(result.rates.find(row => row.rate.currencyCode === "CLP")?.rate).toMatchObject({ rateToUsd: "0.001", quoteDate: "2026-10-19", source: "frankfurter-v2" });
+    expect(result.rates.find(row => row.rate.currencyCode === "EGP")?.rate.rateToUsd).toBe("0.02");
+  });
+
+  it("refuses a different valid pair currency returned for a CLP request", async () => {
+    ctx.db.insert(currency).values(findRateSupportedCurrency("CLP")!).run();
+    seedCache(ctx.db, "2026-06-20T00:00:00Z");
+    const before = listRates(ctx.db);
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => url.includes("bcb.gob.bo")
+      ? { ok: true, text: async () => BCB_HTML }
+      : { ok: true, json: async () => url.includes("/v2/rate/") ? { base: "USD", quote: "EGP", date: "2026-10-19", rate: 50 } : VALID_RESPONSE }));
+    expect((await refreshFromApi()).stale).toBe(true);
+    expect(listRates(ctx.db)).toEqual(before);
+  });
 });

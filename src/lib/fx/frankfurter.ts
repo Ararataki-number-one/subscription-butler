@@ -6,7 +6,7 @@ import type { FxRateListRow } from "@/db/fxRates";
 import { DEFAULT_RATE_BASE, type RateBase } from "@/lib/fx/base";
 import { frankfurterResponseSchema } from "@/lib/validation/fx";
 import { fetchBcbQuote } from "./bcb";
-import { fetchEgpQuote } from "./egp";
+import { fetchPairQuote, V2_CURRENCIES } from "./frankfurter-pair";
 import { FX_REFRESH_INTERVAL_MS } from "./constants";
 import { revalueCurrentAccounts } from "@/db/currentValuation";
 import { requestFx } from "./request";
@@ -90,16 +90,16 @@ async function fetchAndRefresh(
   try {
     const currencyCodes = listCurrencies(db).map((currency) => currency.code);
     const needsBob = currencyCodes.includes("BOB");
-    const needsEgp = currencyCodes.includes("EGP");
+    const pairCurrencies = V2_CURRENCIES.filter(code => currencyCodes.includes(code));
     const symbols = Array.from(
       new Set(
-        [...currencyCodes.filter((code) => code !== base && code !== "BOB" && code !== "EGP"), "USD"].filter(
+        [...currencyCodes.filter((code) => code !== base && code !== "BOB" && !pairCurrencies.some(pair => pair === code)), "USD"].filter(
           (code) => code !== base,
         ),
       ),
     );
 
-    if (symbols.length === 0 && !needsBob && !needsEgp) {
+    if (symbols.length === 0 && !needsBob && !pairCurrencies.length) {
       const fetchedAt = new Date().toISOString();
       db.transaction(tx => {
         upsertRates(tx, [{ currencyCode: "USD", rateToUsd: "1", fetchedAt }]);
@@ -109,7 +109,7 @@ async function fetchAndRefresh(
     }
 
     const url = `${FRANKFURTER_URL}?base=${base}&symbols=${symbols.join(",")}`;
-    const [data, bob, egp] = await Promise.all([
+    const [data, bob, pairRows] = await Promise.all([
       (async () => {
         if (!symbols.length) {
           return { amount: 1, base, date: new Date().toISOString().slice(0, 10), rates: {} as Record<string, number> };
@@ -119,8 +119,9 @@ async function fetchAndRefresh(
         return frankfurterResponseSchema.parse(await res.json());
       })(),
       needsBob ? fetchBcbQuote() : Promise.resolve(null),
-      needsEgp ? fetchEgpQuote() : Promise.resolve(null),
+      Promise.all(pairCurrencies.map(async code => [code, await fetchPairQuote(code)] as const)),
     ]);
+    const pairs = new Map<string, Awaited<ReturnType<typeof fetchPairQuote>>>(pairRows);
     if (data.base !== base) {
       throw new Error(`Frankfurter response base mismatch: ${data.base}`);
     }
@@ -134,11 +135,11 @@ async function fetchAndRefresh(
       currencyCode: code,
       rateToUsd: code === "BOB" && bob
         ? invertToUsd(bob.usdToBob)
-        : code === "EGP" && egp ? invertToUsd(egp.usdToEgp)
+        : pairs.has(code) ? invertToUsd(pairs.get(code)!.usdToQuote)
         : rateToUsdFromBase(code, base, data.rates),
       fetchedAt,
-      quoteDate: code === "BOB" && bob ? bob.date : code === "EGP" && egp ? egp.date : data.date,
-      source: code === "BOB" ? "bcb" : code === "EGP" ? "frankfurter-v2" : "frankfurter",
+      quoteDate: code === "BOB" && bob ? bob.date : pairs.get(code)?.date ?? data.date,
+      source: code === "BOB" ? "bcb" : pairs.has(code) ? "frankfurter-v2" : "frankfurter",
     }));
     db.transaction(tx => {
       upsertRates(tx, rows);
