@@ -88,7 +88,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     if (currency === undefined || native === undefined) return "当时金额未登记";
     const quote = quotes.find(row => row.currency === currency);
     const minorUnit = CURRENCIES.find(row => row.code === currency)?.minorUnit ?? 2;
-    return <>{historical ? <span className="inline-flex flex-col gap-1"><span className="font-mono tabular-nums">{historical.data.cnyMinor === null ? "人民币未登记" : "¥" + formatMinor(historical.data.cnyMinor, 2)}</span><span className="font-mono text-[11px] text-muted-foreground">${formatMinor(historical.data.usdMinor, 2)} USD</span></span> : entry.completed ? <span className="font-mono">{formatMinor(native, minorUnit)} {currency}</span> : <MoneyDisplay value={quote ? freezeUsdMinor(native, minorUnit, quote.rateToUsd) : null} cnyRate={cnyQuote ? { rateToUsd: cnyQuote.rateToUsd, minorUnit: cnyQuote.minorUnit } : null}/>}<small className="mt-1 block text-xs text-muted-foreground">{formatMinor(native, minorUnit)} {currency} · {entry.kind === "subscription" ? "订阅成本" : "约定收费"}</small></>;
+    return <>{historical ? <span className="inline-flex flex-col gap-1"><span className="font-mono tabular-nums">{historical.data.cnyMinor === null ? "人民币未登记" : "¥" + formatMinor(historical.data.cnyMinor, 2)}</span><span className="font-mono text-xs text-muted-foreground">${formatMinor(historical.data.usdMinor, 2)} USD</span></span> : entry.completed ? <span className="font-mono">{formatMinor(native, minorUnit)} {currency}</span> : <MoneyDisplay value={quote ? freezeUsdMinor(native, minorUnit, quote.rateToUsd) : null} cnyRate={cnyQuote ? { rateToUsd: cnyQuote.rateToUsd, minorUnit: cnyQuote.minorUnit } : null}/>}<small className="mt-1 block text-xs text-muted-foreground">{formatMinor(native, minorUnit)} {currency} · {entry.kind === "subscription" ? "订阅成本" : "约定收费"}</small></>;
   }
   function table(rows: RenewalCalendarEntry[], label: string) {
     return <div className="overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[760px] text-left text-sm" aria-label={label}>
@@ -106,16 +106,18 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     </table></div>;
   }
 
-  function dayCell(date: string) {
+  function dayCell(date: string, index: number) {
     const events = inMonth.filter(entry => entry.date === date);
-    return <div key={date} data-calendar-date={date} className={`flex h-20 min-w-0 flex-col rounded-md border bg-card p-1.5 ${date === today ? "border-primary ring-1 ring-primary/20" : ""}`}>
-      <div className="mb-1 flex shrink-0 items-center gap-1 text-xs font-medium"><span>{Number(date.slice(-2))}</span>{date === today && <span className="text-[10px] text-primary">今天</span>}{events.length > 0 && <span className="ml-auto text-[10px] font-normal text-muted-foreground">{events.length} 项</span>}</div>
+    const week = Math.floor((leading + index) / 7);
+    const occupiedWeek = inMonth.some(entry => Math.floor((leading + Number(entry.date.slice(-2)) - 1) / 7) === week);
+    return <div key={date} data-calendar-date={date} className={`flex ${occupiedWeek ? "h-20" : "h-14"} min-w-0 flex-col rounded-md border bg-card p-1.5 ${date === today ? "border-primary ring-1 ring-primary/20" : ""}`}>
+      <div className="mb-1 flex shrink-0 items-center gap-1 text-xs font-medium"><span>{Number(date.slice(-2))}</span>{date === today && <span className="text-xs text-primary">今天</span>}{events.length > 0 && <span className="ml-auto text-xs font-normal text-muted-foreground">{events.length} 项</span>}</div>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
         {events.map(entry => {
           const account = entry.account || entry.customerName || entry.slotLabel || "账号未登记";
           const state = renewalCalendarStatus(entry, today, soonDays), style = renewalStyles[state];
           const description = [style.label, entry.name, roleLabel(entry), account, entry.customerName].filter(Boolean).join(" · ");
-          return <button key={keyOf(entry)} data-calendar-entry={keyOf(entry)} data-calendar-record-id={entry.recordId} data-calendar-occurrence-date={entry.date} data-renewal-state={state} title={description} aria-label={description} className={`flex h-5 w-full min-w-0 items-center gap-1 rounded border px-1.5 text-left text-[11px] leading-tight hover:border-primary ${style.color}`} onClick={() => setSelected(keyOf(entry))}><span className="max-w-[35%] shrink-0 truncate font-medium">{entry.name}</span><span className="min-w-0 flex-1 truncate">{account}</span>{entry.completed && <span aria-hidden="true" className="shrink-0">✓</span>}</button>;
+          return <button key={keyOf(entry)} data-calendar-entry={keyOf(entry)} data-calendar-record-id={entry.recordId} data-calendar-occurrence-date={entry.date} data-renewal-state={state} title={description} aria-label={description} className={`flex h-5 w-full min-w-0 items-center gap-1 rounded border px-1.5 text-left text-xs leading-tight hover:border-primary ${style.color}`} onClick={() => setSelected(keyOf(entry))}><span className="max-w-[35%] shrink-0 truncate font-medium">{entry.name}</span><span className="min-w-0 flex-1 truncate">{account}</span>{entry.completed && <span aria-hidden="true" className="shrink-0">✓</span>}</button>;
         })}
       </div>
     </div>;

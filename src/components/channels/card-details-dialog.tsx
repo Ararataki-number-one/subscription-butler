@@ -74,9 +74,9 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
     catch { toast.error("复制失败，请重试。"); }
   }
   return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}>
-    <DialogContent className="sm:max-w-2xl" onInteractOutside={event => { if (dirty || pending) event.preventDefault(); }}>
+    <DialogContent className="sm:max-w-[38rem]" onInteractOutside={event => { if (dirty || pending) event.preventDefault(); }}>
       <DialogHeader><DialogTitle>{channel.name} · 卡片资料</DialogTitle>
-        <DialogDescription>Windows 本机加密保存，包含在本机加密备份中。默认隐藏；显示 30 秒后或切换窗口时自动隐藏。</DialogDescription>
+        <DialogDescription>本机加密保存，可随加密备份恢复。</DialogDescription>
       </DialogHeader>
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1"><LockKeyhole className="size-3.5" />{revision ? "已加密保存" : "尚未保存卡片资料"}{dirty ? " · 有未保存修改" : ""}</span>
@@ -85,7 +85,7 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
         </Button>
       </div>
       <form autoComplete="off" onSubmit={event => { event.preventDefault(); void save(); }}>
-        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="grid gap-3 sm:grid-cols-2">
+        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
           {FIELDS.map(field => <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}>
             <label htmlFor={`card-${field.key}`} className="mb-1.5 block text-sm font-medium">{field.label}</label>
             <div className="flex gap-1.5">
@@ -93,11 +93,12 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
                 inputMode={field.mode} maxLength={field.key === "billingAddress" || field.key === "note" ? 2000 : 200}
                 placeholder={loading ? "读取中…" : field.placeholder ?? "可选"} value={details[field.key]}
                 onChange={event => { setDetails(current => ({ ...current, [field.key]: event.target.value })); setDirty(true); setConfirmDelete(false); }} />
-              <Button type="button" variant="outline" size="icon" aria-label={`复制${field.label}`} title={dirty ? "保存修改后再复制" : `复制${field.label}`}
+              <Button type="button" variant="ghost" size="icon" className="w-8 shrink-0 text-muted-foreground" aria-label={`复制${field.label}`} title={dirty ? "保存修改后再复制" : `复制${field.label}`}
                 disabled={!revision || dirty || !details[field.key]} onClick={() => void copy(field.key)}><Copy className="size-4" /></Button>
             </div>
           </div>)}
         </fieldset>
+        <p className="mt-3 text-xs text-muted-foreground">离开窗口或显示 30 秒后，资料会自动隐藏。</p>
         {error && <p role="alert" className="mt-3 break-words text-sm text-destructive">{error}</p>}
         {updatedAt && <p className="mt-3 text-xs text-muted-foreground">最近保存：{new Date(updatedAt).toLocaleString("zh-CN")}</p>}
         {confirmDelete && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-destructive/30 p-3 text-sm">

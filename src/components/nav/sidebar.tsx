@@ -6,7 +6,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Boxes,
-  Database,
   CreditCard,
   Coins,
   Banknote,
@@ -29,9 +28,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -64,7 +60,7 @@ export function AppSidebar() {
           </div>
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
             <p className="truncate text-sm font-semibold">订阅管家</p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">订阅与收款管理</p>
+            <p className="truncate text-xs text-muted-foreground">订阅与收款管理</p>
           </div>
         </div>
       </SidebarHeader>
@@ -104,18 +100,12 @@ export function AppSidebar() {
           <SidebarGroupLabel>基础数据</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="参考数据">
-                  <Database aria-hidden="true" />
-                  <span>参考数据</span>
-                </SidebarMenuButton>
-                <SidebarMenuSub>
                   {referenceChildren.map((child) => {
                     const Icon = child.icon;
                     const isActive = pathname === child.href;
                     return (
-                      <SidebarMenuSubItem key={child.href}>
-                        <SidebarMenuSubButton
+                      <SidebarMenuItem key={child.href}>
+                        <SidebarMenuButton
                           asChild
                           isActive={isActive}
                           className={activeClasses}
@@ -128,12 +118,10 @@ export function AppSidebar() {
                             <Icon aria-hidden="true" />
                             <span>{child.label}</span>
                           </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
                     );
                   })}
-                </SidebarMenuSub>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

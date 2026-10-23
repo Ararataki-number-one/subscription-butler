@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Archive, ArrowUpRight, Pencil, Plus, RotateCcw, Search, Star, Wallet } from "lucide-react";
+import { Archive, ArrowUpRight, CreditCard, Pencil, Plus, RotateCcw, Search, Star, Wallet } from "lucide-react";
 import { reactivateChannel, setChannelFavorite, type ChannelActionResult } from "@/actions/channels";
 import type { ChannelRow, ChannelUsage } from "@/db/channels";
 import { CHANNEL_TYPE_OPTIONS, channelTypeLabel } from "@/lib/payment-channels";
@@ -33,6 +33,7 @@ type Props = {
   cnyRate?: CnyDisplayRate | null;
 };
 type Status = "active" | "archived" | "all";
+const USAGE_LABELS: Record<string, string> = { all: "全部使用情况", used: "有关联订阅", unused: "暂未使用", attention: "有订阅需关注" };
 const EMPTY_USAGE: ChannelUsage = {
   subscriptions: [], total: 0, teamCount: 0, independentCount: 0,
   costUsdMinor: 0, missingCostCount: 0, overdueCount: 0, soonCount: 0, nextExpiryDate: null,
@@ -93,33 +94,32 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-6 px-4 py-7 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-4 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">支付渠道</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">区分每张卡和每个平台，查看关联订阅，提前准备续费。</p>
+          <h1 className="text-2xl font-semibold tracking-tight">支付渠道</h1>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">管理支付方式、手续费和加密卡片资料。</p>
         </div>
         <Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增渠道</Button>
       </header>
 
-      <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="grid grid-cols-2 rounded-lg border bg-card xl:grid-cols-4 xl:[&>div+div]:border-l">
         {[
           { label: "可用渠道", value: activeCount, hint: (channels.length - activeCount) + " 个已归档" },
           { label: "常用渠道", value: favoriteCount, hint: "在订阅选择框中优先显示" },
           { label: "关联订阅", value: subscriptionCount, hint: "包含 Business 与独立账号" },
           { label: "需要关注的订阅", value: attentionCount, hint: "已过期或 " + soonDays + " 天内到期" },
         ].map(item => (
-          <div key={item.label} className="rounded-lg border bg-card px-5 py-4">
-            <dt className="text-sm text-muted-foreground">{item.label}</dt>
-            <dd className="mt-2 font-mono text-3xl font-semibold tabular-nums">{item.value}</dd>
-            <p className="mt-1 text-xs text-muted-foreground">{item.hint}</p>
+          <div key={item.label} className="px-4 py-3">
+            <dt className="text-xs text-muted-foreground">{item.label}</dt>
+            <dd className="mt-1 font-mono text-2xl font-semibold tabular-nums">{item.value}</dd>
           </div>
         ))}
       </dl>
 
-      <section aria-label="渠道筛选" className="space-y-4 rounded-lg border bg-muted/20 p-4">
+      <section aria-label="渠道筛选" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1" aria-label="渠道状态">
+          <div className="flex flex-wrap gap-1 rounded-lg bg-secondary/60 p-1" aria-label="渠道状态">
             {([{ value: "active", label: "可用", count: activeCount },
               { value: "archived", label: "已归档", count: channels.length - activeCount },
               { value: "all", label: "全部", count: channels.length }] as const).map(item => (
@@ -135,19 +135,19 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-52 flex-1">
+          <div className="relative min-w-52 basis-full sm:basis-auto sm:flex-1">
             <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input aria-label="搜索渠道" type="search" value={query} onChange={e => setQuery(e.target.value)}
               className="pl-9" placeholder="搜索名称、平台、尾号或备注" />
           </div>
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="w-44" aria-label="渠道类型"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40 flex-1 sm:flex-none" aria-label="渠道类型"><SelectValue>{type === "all" ? "全部渠道类型" : channelTypeLabel(type)}</SelectValue></SelectTrigger>
             <SelectContent><SelectItem value="all">全部渠道类型</SelectItem>
               {CHANNEL_TYPE_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={useFilter} onValueChange={setUseFilter}>
-            <SelectTrigger className="w-40" aria-label="使用情况"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40 flex-1 sm:flex-none" aria-label="使用情况"><SelectValue>{USAGE_LABELS[useFilter] ?? "全部使用情况"}</SelectValue></SelectTrigger>
             <SelectContent><SelectItem value="all">全部使用情况</SelectItem>
               <SelectItem value="used">有关联订阅</SelectItem><SelectItem value="unused">暂未使用</SelectItem>
               <SelectItem value="attention">有订阅需关注</SelectItem>
@@ -162,39 +162,39 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
         <p>成本为关联订阅当前周期的合计</p>
       </div>
       {visible.length ? (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="channel-table overflow-x-auto rounded-lg border bg-card">
           <Table className="min-w-[880px]">
             <TableHeader><TableRow>
               <TableHead>支付渠道</TableHead><TableHead>手续费</TableHead>
               <TableHead>关联订阅</TableHead><TableHead>当前周期成本</TableHead>
-              <TableHead>到期情况</TableHead><TableHead className="text-right">操作</TableHead>
+              <TableHead>到期情况</TableHead><TableHead className="border-l bg-card text-right sm:sticky sm:right-0 sm:z-10">操作</TableHead>
             </TableRow></TableHeader>
             <TableBody>{visible.map(channel => {
               const stats = usage[channel.id] ?? EMPTY_USAGE;
-              return <TableRow key={channel.id} className={cn(!channel.isActive && "bg-muted/30")}>
-                <TableCell className="max-w-xs">
+              return <TableRow key={channel.id} className={cn("group", !channel.isActive && "bg-muted/30")}>
+                <TableCell className="max-w-52">
                   <div className="flex items-center gap-2"><span className="font-medium">{channel.name}</span>
                     {!channel.isActive && <Badge variant="secondary">已归档</Badge>}
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground" title={channel.note}>
+                  <p className="mt-1 max-w-52 truncate text-xs text-muted-foreground" title={[channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}>
                     {[channelTypeLabel(channel.channelType), channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}
                   </p>
                   {cards[channel.id] && <p className="mt-1 text-xs text-muted-foreground">卡片已加密保存{cards[channel.id].last4 ? ` · •••• ${cards[channel.id].last4}` : ""}</p>}
                 </TableCell>
-                <TableCell className="font-mono">{channel.feePercent}%</TableCell>
-                <TableCell><p className="font-mono">{stats.total} 个</p>
-                  <p className="text-[11px] text-muted-foreground">Business {stats.teamCount} · 其他 {stats.independentCount}</p>
+                <TableCell data-label="手续费" className="font-mono">{channel.feePercent}%</TableCell>
+                <TableCell data-label="关联订阅"><p className="font-mono">{stats.total} 个</p>
+                  <p className="text-xs text-muted-foreground">Business {stats.teamCount} · 其他 {stats.independentCount}</p>
                 </TableCell>
-                <TableCell><MoneyDisplay compact value={stats.costUsdMinor} cnyRate={cnyRate} className="font-medium" />
-                  {stats.missingCostCount > 0 && <p className="text-[11px] text-muted-foreground">{stats.missingCostCount} 笔待换算</p>}
+                <TableCell data-label="本期成本"><MoneyDisplay compact value={stats.costUsdMinor} cnyRate={cnyRate} className="font-medium" />
+                  {stats.missingCostCount > 0 && <p className="text-xs text-muted-foreground">{stats.missingCostCount} 笔待换算</p>}
                 </TableCell>
-                <TableCell><p className="font-mono text-xs">{stats.nextExpiryDate ?? "—"}</p>
-                  <div className="mt-1 flex gap-1">
+                <TableCell data-label="最近到期"><p className="font-mono text-xs">{stats.nextExpiryDate ?? "—"}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
                     {stats.overdueCount > 0 && <Badge variant="destructive">{stats.overdueCount} 个已过期</Badge>}
                     {stats.soonCount > 0 && <Badge variant="outline">{stats.soonCount} 个近期到期</Badge>}
                   </div>
                 </TableCell>
-                <TableCell><div className="flex justify-end gap-1">
+                <TableCell className="border-l bg-card group-hover:bg-muted sm:sticky sm:right-0"><div className="flex items-center justify-end gap-1">
                   {channel.isActive && <Button size="icon" variant="ghost" className="size-8" disabled={pending}
                     aria-label={(channel.isFavorite ? "取消常用 " : "设为常用 ") + channel.name}
                     aria-pressed={channel.isFavorite}
@@ -202,10 +202,10 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
                     <Star className={cn("size-4", channel.isFavorite && "fill-amber-400 text-amber-500")} />
                   </Button>}
                   <Button size="sm" variant="ghost" onClick={() => setDetailId(channel.id)}>查看关联</Button>
-                  <Button size="sm" variant="ghost" aria-label={`卡片资料 ${channel.name}`} onClick={() => setCardTarget(channel)}>卡片资料</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDialog({ mode: "edit", channel })}><Pencil className="size-3.5" />编辑</Button>
+                  <Button size="sm" variant="outline" aria-label={`卡片资料 ${channel.name}`} onClick={() => setCardTarget(channel)}><CreditCard className="size-3.5" />卡片资料</Button>
+                  <Button size="icon-sm" variant="ghost" title="编辑渠道" aria-label={`编辑渠道 ${channel.name}`} onClick={() => setDialog({ mode: "edit", channel })}><Pencil className="size-3.5" /></Button>
                   {channel.isActive
-                    ? <Button size="sm" variant="ghost" disabled={pending} onClick={() => setArchiveTarget(channel)}><Archive className="size-3.5" />归档</Button>
+                    ? <Button size="icon-sm" variant="ghost" title="归档渠道" aria-label={`归档渠道 ${channel.name}`} disabled={pending} onClick={() => setArchiveTarget(channel)}><Archive className="size-3.5" /></Button>
                     : <Button size="sm" variant="ghost" disabled={pending} onClick={() => mutate(() => reactivateChannel(channel.id), "已恢复渠道")}><RotateCcw className="size-3.5" />恢复</Button>}
                 </div></TableCell>
               </TableRow>;

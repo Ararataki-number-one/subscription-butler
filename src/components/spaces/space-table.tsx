@@ -66,8 +66,6 @@ type SpaceTableProps = {
   spaceSoonDays: number;
 };
 
-const PAGE_SIZE = 10;
-
 type SortKey = "name" | "country" | "channel" | "amount" | "expiry";
 type SortDirection = "asc" | "desc";
 
@@ -169,11 +167,13 @@ function SortableHead({
   sortKey,
   sort,
   onSort,
+  className,
 }: {
   label: string;
   sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
+  className?: string;
 }) {
   const active = sort.key === sortKey;
   const Icon = active
@@ -182,7 +182,7 @@ function SortableHead({
       : ArrowDown
     : ArrowUpDown;
   return (
-    <TableHead scope="col" className="text-center">
+    <TableHead scope="col" className={`text-center ${className ?? ""}`}>
       <Button
         type="button"
         variant="ghost"
@@ -227,6 +227,7 @@ export function SpaceTable({
     direction: "asc",
   });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [emailQuery, setEmailQuery] = useState("");
   const countryOptions = useMemo(() => {
     const rows = selectedChannel
@@ -267,12 +268,12 @@ export function SpaceTable({
       return sort.direction === "asc" ? result : -result;
     });
   }, [emailFilteredSpaces, sort]);
-  const pageCount = Math.max(1, Math.ceil(sortedSpaces.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(sortedSpaces.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
-  const visibleSpaces = sortedSpaces.slice(pageStart, pageStart + PAGE_SIZE);
+  const pageStart = (currentPage - 1) * pageSize;
+  const visibleSpaces = sortedSpaces.slice(pageStart, pageStart + pageSize);
   const rangeStart = sortedSpaces.length === 0 ? 0 : pageStart + 1;
-  const rangeEnd = Math.min(pageStart + PAGE_SIZE, sortedSpaces.length);
+  const rangeEnd = Math.min(pageStart + pageSize, sortedSpaces.length);
   const totalsByPlan = [
     { label: "Business", match: (plan: string) => plan === "team" },
     { label: "Pro", match: isProPlan },
@@ -317,16 +318,18 @@ export function SpaceTable({
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b bg-background/95 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="shrink-0 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">空间与账号</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            管理 Business、Plus、Pro 等订阅，按账号邮箱搜索，按类型、国家和支付渠道筛选。
+          <h1 className="text-2xl font-semibold tracking-tight">空间与账号</h1>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">
+            查看订阅成本、续费日期与出租收益。
           </p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="w-full sm:w-72">
+        <Button onClick={() => setFormState({ mode: "add" })}><Plus className="size-4" /><span className="hidden sm:inline">新增空间 / 账号</span><span className="sm:hidden">新增</span></Button>
+      </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
+          <div className="col-span-2 lg:col-span-1">
             <Label htmlFor="space-email-filter" className="sr-only">
               账号 / 母号 / 子号邮箱
             </Label>
@@ -346,15 +349,15 @@ export function SpaceTable({
             setPage(1);
             router.push(buildHref(selectedCountry, selectedChannel, value === "all" ? undefined : value));
           }}>
-            <SelectTrigger className="w-40" aria-label="按订阅类型筛选"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full" aria-label="按订阅类型筛选"><SelectValue>{SPACE_PLAN_OPTIONS.find(option => option.value === selectedPlan)?.label ?? "全部订阅类型"}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部订阅类型</SelectItem>
               {SPACE_PLAN_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={selectedCountry ?? "all"} onValueChange={setCountry}>
-            <SelectTrigger className="w-40" aria-label="按国家/地区筛选">
-              <SelectValue placeholder="全部国家/地区" />
+            <SelectTrigger className="w-full" aria-label="按国家/地区筛选">
+              <SelectValue>{countryOptions.find(country => country.code === selectedCountry)?.label ?? "全部国家/地区"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部国家/地区</SelectItem>
@@ -369,8 +372,8 @@ export function SpaceTable({
             value={selectedChannel ? String(selectedChannel) : "all"}
             onValueChange={setChannel}
           >
-            <SelectTrigger className="w-40" aria-label="按支付渠道筛选">
-              <SelectValue placeholder="全部渠道" />
+            <SelectTrigger className="col-span-2 w-full lg:col-span-1" aria-label="按支付渠道筛选">
+              <SelectValue>{channelOptions.find(channel => channel.id === selectedChannel)?.name ?? "全部渠道"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部渠道</SelectItem>
@@ -381,23 +384,18 @@ export function SpaceTable({
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => setFormState({ mode: "add" })}>
-            <Plus className="size-4" />
-            新增空间 / 账号
-          </Button>
         </div>
-      </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {totalsByPlan.map(group => <div key={group.label} className="rounded-md border bg-muted/20 p-3">
-          <div className="flex justify-between text-sm font-medium"><span>{group.label} 金额汇总</span><span>{group.count} 个</span></div>
+        {totalsByPlan.map(group => <div key={group.label} className="rounded-lg border bg-card px-4 py-3">
+          <div className="flex justify-between text-sm font-semibold"><span>{group.label}</span><span className="text-xs font-normal text-muted-foreground">{group.count} 个订阅</span></div>
           <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
-            <div className="text-muted-foreground">约定收入 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.income} cnyRate={cnyRate} compact /></p></div>
-            <div className="text-muted-foreground">成本 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.cost} cnyRate={cnyRate} compact /></p></div>
-            <div className="text-muted-foreground">预计净收益 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.net} cnyRate={cnyRate} compact /></p></div>
+            <div className="text-muted-foreground">约定收入 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.income} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
+            <div className="text-muted-foreground">成本 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.cost} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
+            <div className="text-muted-foreground">预计净收益 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.net} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
           </div>
         </div>)}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">金额按当前筛选分别汇总。人民币优先，按缓存汇率折算；美元随金额补充展示。</p>
+      <p className="mt-2 text-xs text-muted-foreground">按当前筛选汇总 · 人民币 / 美元</p>
       </div>
 
       {emailFilteredSpaces.length === 0 ? (
@@ -424,12 +422,12 @@ export function SpaceTable({
         </div>
       ) : (
         <>
-        <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
+        <div className="mx-4 mb-3 min-h-0 flex-1 overflow-auto rounded-lg border bg-card sm:mx-6 lg:mx-8">
             <table
               data-slot="table"
-              className="w-full min-w-[980px] caption-bottom text-sm [&_td]:py-2"
+              className="w-full min-w-[980px] caption-bottom text-sm [&_td]:py-3"
             >
-          <TableHeader className="sticky top-0 z-20 bg-background shadow-sm [&_th]:bg-background">
+          <TableHeader className="sticky top-0 z-20 bg-card [&_th]:bg-card">
             <TableRow>
               <SortableHead
                 label="名称"
@@ -437,11 +435,12 @@ export function SpaceTable({
                 sort={sort}
                 onSort={setSortKey}
               />
-              <TableHead scope="col" className="text-center">
+              <TableHead scope="col" className="hidden text-left min-[1360px]:table-cell">
                 账号 / 母号邮箱
               </TableHead>
               <SortableHead
                 label="国家/地区"
+                className="hidden 2xl:table-cell"
                 sortKey="country"
                 sort={sort}
                 onSort={setSortKey}
@@ -465,7 +464,7 @@ export function SpaceTable({
                 onSort={setSortKey}
               />
               <TableHead scope="col" className="text-left">账号状态 / 净收益<br /><span className="text-xs font-normal">月折算 · 人民币 / 美元</span></TableHead>
-              <TableHead scope="col" className="text-center">
+              <TableHead scope="col" className="sticky right-0 z-30 border-l text-center">
                 操作
               </TableHead>
             </TableRow>
@@ -474,8 +473,8 @@ export function SpaceTable({
             {visibleSpaces.map((row) => {
               const { space, motherAccount, paymentChannel, currency } = row;
               return (
-                <TableRow key={space.id}>
-                  <TableCell className="text-center font-medium">
+                <TableRow key={space.id} className="group">
+                  <TableCell className="min-w-48 font-medium min-[1360px]:min-w-28">
                     <div className="mb-1"><Badge variant="outline">{spacePlanLabel(space.planType, space.customPlanName)}</Badge>
                       {isProPlan(space.planType) && <span className="ml-1 text-xs text-muted-foreground">拼车</span>}
                     </div>
@@ -485,22 +484,23 @@ export function SpaceTable({
                     >
                       {space.name}
                     </Link>
+                    <span className="mt-1 block max-w-48 truncate font-mono text-xs font-normal text-muted-foreground min-[1360px]:hidden" title={motherAccount.email}>{motherAccount.email}</span>
                   </TableCell>
-                  <TableCell className="text-center font-mono">
-                    {motherAccount.email}
+                  <TableCell className="hidden font-mono text-[13px] min-[1360px]:table-cell">
+                    <span className="block max-w-56 truncate" title={motherAccount.email}>{motherAccount.email}</span>
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="hidden text-center 2xl:table-cell">
                     {formatCountryLabel(space.country)}
                   </TableCell>
-                  <TableCell className="text-center">{paymentChannel.name}</TableCell>
-                  <TableCell className="text-center font-mono">
-                    <div className="inline-flex flex-col items-start gap-1 text-left tabular-nums">
+                  <TableCell className="text-center">{paymentChannel.name}<span className="mt-1 block text-xs text-muted-foreground 2xl:hidden">{formatCountryLabel(space.country)}</span></TableCell>
+                  <TableCell className="min-w-[185px] font-mono">
+                    <div className="inline-flex min-w-40 flex-col items-start gap-1 text-left tabular-nums">
                       <MoneyDisplay value={space.amountUsd} cnyRate={cnyRate} compact className="font-medium" />
-                      <span className="text-[11px] text-muted-foreground">原币合计 {formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}{space.feeAmountMinor > 0 ? " · 含手续费 " + space.feePercent + "%" : ""}</span>
+                      <span className="whitespace-nowrap text-xs leading-5 text-muted-foreground" title="原币合计，已包含支付手续费">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}{space.feeAmountMinor > 0 ? " · 含" + space.feePercent + "%费" : ""}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex flex-col items-start justify-center gap-1.5">
                       <span className="font-mono">
                         {space.expiryDate ?? "-"}
                       </span>
@@ -514,7 +514,7 @@ export function SpaceTable({
                     {teamEarnings[space.id] ? <TeamEarningsSummary earnings={teamEarnings[space.id]} cnyRate={cnyRate} />
                       : <span className="text-xs text-muted-foreground">独立账号</span>}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="sticky right-0 border-l bg-card text-center group-hover:bg-muted">
                     <div className="flex justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -522,7 +522,7 @@ export function SpaceTable({
                             asChild
                             variant="ghost"
                             size="icon"
-                            className="size-9"
+                            className="size-8"
                             aria-label={`查看 ${space.name}`}
                           >
                             <Link href={`/spaces/${space.id}`}>
@@ -537,7 +537,7 @@ export function SpaceTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-9"
+                            className="size-8"
                             aria-label={`编辑 ${space.name}`}
                             onClick={() =>
                               setFormState({
@@ -556,7 +556,7 @@ export function SpaceTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-9"
+                            className="size-8"
                             aria-label={`删除 ${space.name}`}
                             onClick={() => setDeleteTarget(row)}
                           >
@@ -573,11 +573,15 @@ export function SpaceTable({
           </TableBody>
             </table>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-background px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-card px-4 py-3 sm:px-6 lg:px-8">
             <p className="text-sm text-muted-foreground">
               显示 {rangeStart}-{rangeEnd} 条，共 {sortedSpaces.length} 条
             </p>
             <div className="flex items-center gap-2">
+              <Select value={String(pageSize)} onValueChange={value => { setPageSize(Number(value)); setPage(1); }}>
+                <SelectTrigger className="h-8 w-28" aria-label="每页条数"><SelectValue>{pageSize} 条 / 页</SelectValue></SelectTrigger>
+                <SelectContent>{[10, 20, 50].map(size => <SelectItem key={size} value={String(size)}>{size} 条 / 页</SelectItem>)}</SelectContent>
+              </Select>
               <Button
                 type="button"
                 variant="outline"

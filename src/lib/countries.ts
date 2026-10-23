@@ -23,6 +23,8 @@ export const COUNTRIES = [
   { code: "TH", label: "泰国" },
   { code: "SG", label: "新加坡" },
   { code: "CH", label: "瑞士" },
+  { code: "CL", label: "智利" },
+  { code: "EG", label: "埃及" },
   { code: "AU", label: "澳大利亚" },
   { code: "CA", label: "加拿大" },
   { code: "BR", label: "巴西" },
