@@ -403,9 +403,7 @@ export function SpaceTable({
           {hasFilters ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 py-12 text-center">
             <h2 className="text-lg font-semibold">没有符合条件的空间</h2>
-            <p className="max-w-md text-sm text-muted-foreground">
-              调整或清除筛选条件后再试。
-            </p>
+            <Button variant="outline" size="sm" onClick={() => { setEmailQuery(""); setPage(1); router.push("/spaces"); }}>清除筛选</Button>
           </div>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 py-12 text-center">
