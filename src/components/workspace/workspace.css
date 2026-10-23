@@ -1,1 +1,41 @@
 .ops{max-width:1440px;margin:auto;padding:24px;color:var(--foreground);font-size:14px}.ops h1{font-size:26px;font-weight:650}.ops h2{font-size:19px;font-weight:600;margin:22px 0 12px}.ops h3{font-weight:600}.ops p{line-height:1.7}.ops a{color:var(--primary)}.ops .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.ops .bar.end{justify-content:space-between}.ops .muted{color:var(--muted-foreground)}.ops .nav{display:flex;gap:6px;flex-wrap:wrap;margin:22px 0;border-bottom:1px solid var(--border);padding-bottom:12px}.ops button{border:1px solid var(--border);border-radius:6px;background:var(--card);padding:7px 12px;cursor:pointer;white-space:nowrap}.ops button.primary,.ops button.active{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}.ops button.danger{color:var(--destructive)}.ops button:disabled{opacity:.55;cursor:wait}.ops input,.ops select,.ops textarea{border:1px solid var(--input);border-radius:6px;background:var(--card);padding:9px;min-width:0;width:100%}.ops .search{flex:1;max-width:600px}.ops .badge{font-size:12px;background:var(--muted);border-radius:5px;padding:3px 7px}.ops .notice{padding:12px 14px;border:1px solid var(--border);border-left:3px solid var(--primary);background:var(--card);margin:14px 0;border-radius:6px}.ops .error{border-left-color:var(--destructive);color:var(--destructive)}.ops .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:7px;background:var(--card)}.ops table{width:100%;border-collapse:collapse;white-space:nowrap;text-align:left}.ops th{font-size:12px;color:var(--muted-foreground);background:var(--muted);font-weight:500}.ops td,.ops th{padding:11px 13px;border-bottom:1px solid var(--border);vertical-align:top}.ops tr:last-child td{border-bottom:0}.ops td small{display:block;color:var(--muted-foreground);white-space:normal;max-width:380px}.ops .actions{display:flex;gap:5px;flex-wrap:wrap}.ops .actions button{padding:4px 8px;font-size:12px}.ops .metrics{display:flex;gap:28px;flex-wrap:wrap;margin:24px 0;padding:18px 0;border-bottom:1px solid var(--border)}.ops .metric{min-width:130px}.ops .metric strong{display:block;font-size:24px;font-variant-numeric:tabular-nums}.ops .metric small{color:var(--muted-foreground)}.ops dialog{margin:auto;border:1px solid var(--border);border-radius:9px;width:min(670px,calc(100vw - 24px));max-height:90vh;overflow:auto;padding:22px;background:var(--card);color:var(--foreground)}.ops dialog::backdrop{background:#0b252c66}.ops .fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}.ops label{display:block;font-size:12px;color:var(--muted-foreground)}.ops label input,.ops label select,.ops label textarea{display:block;margin-top:5px;color:var(--foreground);font-size:14px}.ops .fields .wide{grid-column:1/-1}.ops .detail{margin:16px 0;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:6px}.ops pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;padding:10px;background:var(--muted);border-radius:6px}.ops .calendar{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:6px;min-width:790px}.ops .day{min-height:100px;background:var(--card);padding:10px;border:1px solid var(--border);border-radius:6px}.ops .day button{display:block;width:100%;font-size:11px;padding:4px;text-align:left;margin-top:5px;white-space:normal}.ops .day.today{border-color:var(--primary)}.ops .inline{display:flex;gap:10px;align-items:end}.ops .inline label{flex:1}.ops .token{font-family:monospace;user-select:all;overflow-wrap:anywhere}.ops .toolbar{margin:12px 0;display:flex;gap:10px;flex-wrap:wrap}.ops .toolbar input,.ops .toolbar select{width:auto;max-width:100%}@media(max-width:700px){.ops{padding:16px}.ops .fields{grid-template-columns:1fr}.ops .metrics{gap:18px}.ops h1{font-size:22px}.ops .metric{min-width:110px}.ops .inline{flex-direction:column;align-items:stretch}.ops .nav button{padding:7px 10px}.ops td,.ops th{padding:9px}.ops .bar .search{flex-basis:100%}}
+
+/* The operations views share the app's readable, compact control scale. */
+.ops {line-height:1.5}
+.ops header {margin-bottom:16px}
+.ops button {min-height:32px;transition:background-color .14s,color .14s,border-color .14s}
+.ops button:hover:not(:disabled) {background:var(--accent)}
+.ops button.primary:hover:not(:disabled),.ops button.active:hover:not(:disabled){background:color-mix(in srgb,var(--primary),black 8%)}
+.ops :is(button,input,select,textarea,summary):focus-visible {outline:2px solid var(--ring);outline-offset:2px}
+.ops :is(th,label,small,.badge,pre),.ops .actions button,.ops .day button {font-size:13px}
+.ops td small {line-height:1.5;margin-top:3px}
+.ops .actions {gap:6px;flex-wrap:nowrap}
+.ops th {background:var(--muted);font-weight:500}
+.ops .record-link {padding:0;border-color:transparent;background:transparent;color:var(--primary);font-weight:600;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.ops .record-link:hover:not(:disabled) {background:transparent;text-decoration:underline}
+.ops .customer-tools {margin-bottom:16px;gap:12px}
+.ops .customer-list td {vertical-align:middle}
+.ops .customer-list td:nth-child(2) {white-space:normal;overflow-wrap:anywhere;max-width:300px}
+.ops .record-source {font-size:13px;margin:10px 0}
+.ops dialog {border-radius:10px;padding:20px;box-shadow:0 16px 48px #182c2429}
+.ops dialog .required {color:var(--destructive)}
+.ops dialog .editor-footer {border-top:1px solid var(--border);padding-top:16px}
+.ops-embedded .search {max-width:500px}
+@media(max-width:700px){
+ .ops.ops-embedded header {display:grid;grid-template-columns:1fr auto;align-items:start;gap:12px}
+ .ops-embedded header p {grid-column:1/-1}
+ .ops .customer-tools .search {flex-basis:0;min-width:0}
+ .ops .customer-list table,.ops .customer-list tbody {display:block;white-space:normal}
+ .ops .customer-list thead {display:none}
+ .ops .customer-list tr {display:grid;grid-template-columns:1fr;gap:5px;padding:12px;border-bottom:1px solid var(--border)}
+ .ops .customer-list td {padding:0;border:0;display:flex;gap:10px;max-width:none!important;overflow-wrap:anywhere}
+ .ops .customer-list td::before {content:attr(data-label);color:var(--muted-foreground);font-size:13px;flex:0 0 85px;padding-top:5px}
+ .ops .customer-list td:first-child {display:block;margin-bottom:2px}
+ .ops .customer-list td:first-child::before {display:none}
+ .ops .customer-list td:nth-child(4) {font-size:13px}
+ .ops .customer-list .actions {flex-wrap:wrap}
+ .ops dialog {max-height:calc(100dvh - 24px);padding:16px}
+}
+@media(prefers-reduced-motion:reduce){.ops button{transition:none}}
+
+@media(max-width:700px){.ops .customer-list td[data-empty="true"]{display:none}.ops .customer-list td[data-label="操作"]::before{display:none}.ops .customer-list td[data-label="操作"]{margin-top:5px}}
