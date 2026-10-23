@@ -181,7 +181,7 @@ export function CurrencyDialog({
           <DialogDescription>
             {mode === "add"
               ? "选择国家/地区后会自动加入对应币种。新增后刷新汇率即可获取该币种缓存。"
-              : "修改名称、符号或最小单位位数；代码保持不变。"}
+              : "修改名称、符号或小数位数；代码保持不变。"}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -194,7 +194,7 @@ export function CurrencyDialog({
                 <Input
                   value={countryQuery}
                   onChange={(event) => setCountryQuery(event.target.value)}
-                  placeholder="筛选国家/地区"
+                  placeholder="筛选国家/地区" aria-label="筛选可添加的国家/地区"
                 />
               </div>
             ) : null}
@@ -290,7 +290,7 @@ export function CurrencyDialog({
               name="minorUnit"
               render={({ field }) => (
                 <FormItem className={mode === "add" ? "hidden" : undefined}>
-                  <FormLabel>最小单位位数</FormLabel>
+                  <FormLabel>小数位数</FormLabel>
                   <FormControl>
                     <Input
                       type="number"

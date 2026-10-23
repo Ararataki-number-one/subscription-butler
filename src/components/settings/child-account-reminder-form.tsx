@@ -177,18 +177,16 @@ export function ChildAccountReminderForm({
       <CardHeader className="border-b">
         <CardTitle>子账号邮件提醒</CardTitle>
         <CardDescription>
-          非自用子账号到期当天，只发送给自己的必填接收邮箱。
+          非自用子账号在下一付款日当天按指定时间发送一次，接收邮箱必填。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+        <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <Label htmlFor="childAccountEmailReminderEnabled">
               开启子账号邮件提醒
             </Label>
-            <p className="text-sm text-muted-foreground">
-              仅在子账号下一付款日当天按指定时间发送一次。
-            </p>
+
           </div>
           <Switch
             id="childAccountEmailReminderEnabled"

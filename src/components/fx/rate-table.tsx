@@ -53,7 +53,7 @@ function toPositiveNumber(value: string): number | null {
 
 function formatRate(value: number | null): string {
   if (value === null) return "—";
-  return String(Number(value.toPrecision(12)));
+  return new Intl.NumberFormat("en-US", { maximumSignificantDigits: 8, useGrouping: false }).format(value);
 }
 
 function buildHref(base: RateBase): string {
@@ -109,18 +109,17 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b bg-background/95 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="shrink-0 border-b bg-background/95 px-4 py-4 sm:px-6 lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">汇率</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            每 5 分钟自动更新汇率，并重算当前订阅成本和预计收益；也可手动刷新。
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">汇率</h1>
+
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">基准币种</span>
           <Select value={base} onValueChange={onBaseChange}>
             <SelectTrigger className="w-36" aria-label="选择基准币种">
-              <SelectValue placeholder="基准币" />
+              <SelectValue placeholder="基准币">{base}</SelectValue>
             </SelectTrigger>
             <SelectContent align="end" position="popper">
               {RATE_BASES.map((item) => (
@@ -146,12 +145,10 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
           当前基准 {base} · 缓存更新于 {asOf}
         </p>
       )}
-      <p className="mt-2 text-sm text-muted-foreground">
-        每 1 {base} 可兑换下表所示金额。参考汇率用于成本折算，实际成交价以银行或支付渠道为准。
-      </p>
-      <p className="mt-2 text-sm text-muted-foreground">
-        BOB 使用玻利维亚央行官方报价；其他币种使用 Frankfurter（欧洲央行）参考汇率。跨币种换算可能使用不同日期的最近报价。
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground">每 1 {base} 可兑换下表金额，成交价以支付渠道为准。</p>
+      <details className="mt-2 text-xs text-muted-foreground"><summary className="w-fit cursor-pointer">汇率来源与报价说明</summary>
+        <p className="mt-2 max-w-3xl leading-6">BOB 使用玻利维亚央行官方报价；其他币种使用 Frankfurter（欧洲央行）参考汇率。跨币种换算可能使用不同日期的最近报价。</p>
+      </details>
 
       {showStaleBanner && (
         <Alert variant="destructive" className="mt-4">
@@ -180,7 +177,7 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
-          <table data-slot="table" className="w-full min-w-[820px] table-fixed caption-bottom text-sm">
+          <table data-slot="table" className="w-full min-w-[820px] table-fixed caption-bottom bg-card text-sm">
           <colgroup>
             <col className="w-[10%]" />
             <col className="w-[8%]" />
@@ -217,7 +214,7 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
                     {rate.currencyCode}
                   </TableCell>
                   <TableCell className="font-mono">{currency.symbol}</TableCell>
-                  <TableCell className="text-right font-mono">
+                  <TableCell className="text-right font-mono" title={displayRate === null ? undefined : String(displayRate)}>
                     {formatRate(displayRate)}
                   </TableCell>
                   <TableCell className="text-right font-mono">

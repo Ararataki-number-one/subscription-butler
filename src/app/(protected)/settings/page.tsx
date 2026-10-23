@@ -19,12 +19,14 @@ export default function SettingsPage() {
   const mfaStatus = getMfaStatus(db);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-7 px-4 py-7 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
       <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">设置</h1>
-        <p className="text-sm leading-6 text-muted-foreground">配置登录安全、空间和子账号状态规则。</p>
+        <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
+
       </div>
 
+      <nav aria-label="设置分类" className="flex gap-4 border-b pb-3 text-sm text-primary"><a className="underline-offset-4 hover:underline" href="#expiry-settings">到期与邮件提醒</a><a className="underline-offset-4 hover:underline" href="#security-settings">登录安全</a></nav>
+      <section id="expiry-settings" className="scroll-mt-20 space-y-4">
       <StatusThresholdForm
         thresholds={thresholds}
         emailReminder={emailReminder}
@@ -32,7 +34,8 @@ export default function SettingsPage() {
       <ChildAccountReminderForm
         settings={childAccountEmailReminder}
       />
-      <MfaSettings status={mfaStatus} />
+      </section>
+      <section id="security-settings" className="scroll-mt-20"><MfaSettings status={mfaStatus} /></section>
     </div>
   );
 }

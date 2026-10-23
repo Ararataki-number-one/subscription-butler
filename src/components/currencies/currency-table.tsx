@@ -57,12 +57,12 @@ export function CurrencyTable({
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
-      <div className="shrink-0 border-b bg-background/95 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="shrink-0 border-b bg-background/95 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">币种</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">币种</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              币种用于金额输入和成本折算。新增币种后会随定时刷新尝试获取报价；没有可用汇率时，需要先刷新汇率再创建订阅。
+              新增币种随定时刷新尝试获取报价；缺少汇率时，请先刷新汇率再创建订阅。
             </p>
           </div>
           <Button onClick={() => setDialog({ mode: "add" })}>
@@ -73,22 +73,22 @@ export function CurrencyTable({
 
         <div className="mt-4 max-w-sm">
           <Label htmlFor="currency-country-filter" className="mb-2">
-            国家/地区
+            搜索币种
           </Label>
           <Input
             id="currency-country-filter"
             value={countryQuery}
             onChange={(event) => setCountryQuery(event.target.value)}
-            placeholder="筛选国家/地区"
+            placeholder="国家、币种名称或代码"
           />
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          最小单位位数表示金额允许的小数位数，以币种元数据为准。
+          小数位数决定金额可填写的精度，例如人民币为 2 位。
         </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
-      <table data-slot="table" className="w-full min-w-[720px] table-fixed caption-bottom text-sm">
+      <table data-slot="table" className="w-full min-w-[720px] table-fixed caption-bottom bg-card text-sm">
         <colgroup>
           <col className="w-[26%]" />
           <col className="w-[11%]" />
@@ -104,7 +104,7 @@ export function CurrencyTable({
             <TableHead scope="col">符号</TableHead>
             <TableHead scope="col">名称</TableHead>
             <TableHead scope="col" className="text-right">
-              最小单位位数
+              小数位数
             </TableHead>
             <TableHead scope="col" className="text-right">
               操作
@@ -128,7 +128,7 @@ export function CurrencyTable({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-11"
+                        className="size-8"
                         aria-label={`编辑 ${row.code}`}
                         onClick={() => setDialog({ mode: "edit", currency: row })}
                       >
@@ -142,7 +142,7 @@ export function CurrencyTable({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-11"
+                        className="size-8"
                         aria-label={`删除 ${row.code}`}
                         onClick={() => setDeleteTarget(row)}
                       >

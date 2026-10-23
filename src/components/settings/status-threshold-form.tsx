@@ -222,14 +222,13 @@ export function StatusThresholdForm({
     <div className="grid gap-4">
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>状态阈值</CardTitle>
-          <CardDescription>空间和子账号分别计算即将到期状态。</CardDescription>
+          <CardTitle>到期提醒提前天数</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={onThresholdSubmit} className="space-y-5">
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="spaceSoonDays">空间阈值</Label>
+                <Label htmlFor="spaceSoonDays">空间到期前</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     id="spaceSoonDays"
@@ -250,7 +249,7 @@ export function StatusThresholdForm({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="childAccountSoonDays">子账号阈值</Label>
+                <Label htmlFor="childAccountSoonDays">子账号付款前</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     id="childAccountSoonDays"
@@ -290,18 +289,16 @@ export function StatusThresholdForm({
       <Card>
         <CardHeader className="border-b">
           <CardTitle>空间邮件提醒</CardTitle>
-          <CardDescription>到达空间阈值后，在到期前每天按指定时间自动发送。</CardDescription>
+          <CardDescription>未续费空间进入到期提醒窗口后，每天按指定时间发送。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onEmailSubmit} className="space-y-5">
-            <div className="flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+            <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <Label htmlFor="spaceEmailReminderEnabled">
                   开启空间邮件提醒
                 </Label>
-                <p className="text-sm text-muted-foreground">
-                  若空间尚未续费，将在提醒窗口内每天发送一次。
-                </p>
+
               </div>
               <Switch
                 id="spaceEmailReminderEnabled"
