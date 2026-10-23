@@ -166,7 +166,8 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
     assert.equal(data.entries.filter(row => row.data.customerId === customer.id && row.data.type === "receipt").length, 1);
     steps.push("partial-receipt-form");
     await click("客户", "nav"); await click(customerName);
-    await waitFor(() => document.body.textContent.includes("记录详情与来源"), "customer detail history");
+    await waitFor(expected => document.querySelector("section.detail h2")?.textContent === expected,
+      "customer detail history", 20000, [customerName + " · 租赁与账期"]);
     await click("历史", "section.detail");
     await waitFor(() => document.body.textContent.includes("renew") && document.body.textContent.includes("join"), "rental lifecycle history");
     steps.push("customer-rental-history");
