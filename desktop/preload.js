@@ -5,6 +5,13 @@ function currentMemberToken() {
 }
 
 contextBridge.exposeInMainWorld("teamAccountManagerDesktop", {
+  cardVault: {
+    summary: () => ipcRenderer.invoke("card-vault:summary", currentMemberToken()),
+    get: id => ipcRenderer.invoke("card-vault:get", currentMemberToken(), id),
+    save: (id, details, revision) => ipcRenderer.invoke("card-vault:save", currentMemberToken(), id, details, revision),
+    remove: (id, revision) => ipcRenderer.invoke("card-vault:remove", currentMemberToken(), id, revision),
+    copy: (id, field) => ipcRenderer.invoke("card-vault:copy", currentMemberToken(), id, field),
+  },
   maintenance: {
     createBackup: () => ipcRenderer.invoke("maintenance:backup", currentMemberToken()),
     restoreBackup: () => ipcRenderer.invoke("maintenance:restore", currentMemberToken()),

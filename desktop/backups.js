@@ -7,7 +7,7 @@ const { validateConfig } = require("./runtime.js");
 const FORMAT = "subscription-butler-local-backup";
 const MAX_BYTES = 128 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
-const FILES = ["data/app.db", "config.json", "credentials.bin", "desktop-preferences.json", "notification-state.json"];
+const FILES = ["data/app.db", "config.json", "credentials.bin", "desktop-preferences.json", "notification-state.json", "card-vault.bin"];
 const SIDECARS = ["data/app.db-wal", "data/app.db-shm"];
 const SHA256 = /^[a-f0-9]{64}$/u;
 function digest(bytes) { return crypto.createHash("sha256").update(bytes).digest("hex"); }
@@ -214,9 +214,10 @@ class BackupManager {
   recoverInterruptedRestore() {
     if (!fs.existsSync(this.journalPath())) return false;
     const journal = JSON.parse(fs.readFileSync(this.journalPath(), "utf8"));
+    const layouts = [[...FILES, ...SIDECARS], [...FILES.filter(file => file !== "card-vault.bin"), ...SIDECARS]];
     if (journal.version !== 1 || !/^\.restore-[a-f0-9-]{36}$/u.test(journal.directory) ||
-        !Array.isArray(journal.files) || journal.files.length !== FILES.length + SIDECARS.length ||
-        journal.files.some((file, index) => file.path !== [...FILES, ...SIDECARS][index] || typeof file.existed !== "boolean")) {
+        !Array.isArray(journal.files) || !layouts.some(layout => journal.files.length === layout.length &&
+          journal.files.every((file, index) => file.path === layout[index] && typeof file.existed === "boolean"))) {
       throw new Error("恢复日志无效，已保留原数据与暂存目录。");
     }
     const directory = ensurePlainPath(this.userData, journal.directory);

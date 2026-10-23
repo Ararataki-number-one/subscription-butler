@@ -166,6 +166,26 @@ test("interrupted atomic restore rolls original files back on next startup", asy
   fs.writeFileSync(path.join(data.userData, "restore-journal.json"), JSON.stringify({ version: 1, directory: name, files }));
   assert.equal(data.manager.recoverInterruptedRestore(), true); assert.equal(amount(data.database), 5000);
 });
+
+test("encrypted card vault is included and restored byte-for-byte; old backups clear newer vault files", async t => {
+  const data = fixture(t), oldBackup = path.join(data.directory, "before-card.sbbackup"), backup = path.join(data.directory, "with-card.sbbackup"), vault = path.join(data.userData, "card-vault.bin");
+  await data.manager.create(oldBackup);
+  const encrypted = protectKey("synthetic-private-card-vault"); fs.writeFileSync(vault, encrypted);
+  await data.manager.create(backup); assert.deepEqual(data.manager.read(backup).entries.get("card-vault.bin"), encrypted);
+  fs.writeFileSync(vault, protectKey("newer-value"));
+  await data.manager.restorePrepared(await data.manager.prepareRestore(backup), { stop: async () => {}, start: async () => {} });
+  assert.deepEqual(fs.readFileSync(vault), encrypted);
+  const restored = await data.manager.restorePrepared(await data.manager.prepareRestore(oldBackup), { stop: async () => {}, start: async () => {} });
+  assert.equal(fs.existsSync(vault), false); assert.deepEqual(data.manager.read(restored.rollbackFile).entries.get("card-vault.bin"), encrypted);
+});
+
+test("interrupted pre-card-vault restore journals remain recoverable", t => {
+  const data = fixture(t), name = `.restore-${crypto.randomUUID()}`, directory = path.join(data.userData, name);
+  const files = [...FILES.filter(file => file !== "card-vault.bin"), "data/app.db-wal", "data/app.db-shm"].map(filename => ({ path: filename, existed: fs.existsSync(path.join(data.userData, filename)) }));
+  fs.mkdirSync(path.join(directory, "original/data"), { recursive: true }); fs.renameSync(data.database, path.join(directory, "original/data/app.db")); fs.writeFileSync(data.database, "interrupted old-version replacement");
+  fs.writeFileSync(path.join(data.userData, "restore-journal.json"), JSON.stringify({ version: 1, directory: name, files }));
+  assert.equal(data.manager.recoverInterruptedRestore(), true); assert.equal(amount(data.database), 5000);
+});
 test("newer or unrecognized SQLite schema is blocked before migration and restore", async t => {
   const data = fixture(t); const sqlite = new Database(data.database);
   sqlite.prepare("INSERT INTO __drizzle_migrations(hash,created_at) VALUES(?,?)").run("future-migration-hash", Date.now() + 99999999999); sqlite.close();

@@ -61,6 +61,7 @@ yarn-error.log*
 .next-dev.stderr.log
 
 # env files (can opt-in for committing if needed)
+card-vault.bin
 .env*
 !.env.example
 

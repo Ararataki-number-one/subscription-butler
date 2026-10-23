@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Archive, ArrowUpRight, Pencil, Plus, RotateCcw, Search, Star, Wallet } from "lucide-react";
@@ -14,6 +14,8 @@ import { MoneyDisplay } from "@/components/money-display";
 import { dualMoneyText, type CnyDisplayRate } from "@/lib/money-display";
 import { cn } from "@/lib/utils";
 import { ChannelDialog } from "./channel-dialog";
+import { CardDetailsDialog } from "./card-details-dialog";
+import type { CardSummary } from "@/lib/card-details";
 import { ArchiveDialog } from "./archive-dialog";
 import { ExpiryBadge } from "@/components/spaces/expiry-badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +43,10 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
   const [dialog, setDialog] = useState<{ mode: "add" | "edit"; channel?: ChannelRow } | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<ChannelRow | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [cardTarget, setCardTarget] = useState<ChannelRow | null>(null);
+  const [cards, setCards] = useState<CardSummary>({});
+  const refreshCards = () => { void window.teamAccountManagerDesktop?.cardVault?.summary().then(setCards).catch(() => {}); };
+  useEffect(() => { void window.teamAccountManagerDesktop?.cardVault?.summary().then(setCards).catch(() => {}); }, []);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status>(showArchived ? "all" : "active");
   const [type, setType] = useState("all");
@@ -173,6 +179,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
                   <p className="mt-1 truncate text-xs text-muted-foreground" title={channel.note}>
                     {[channelTypeLabel(channel.channelType), channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}
                   </p>
+                  {cards[channel.id] && <p className="mt-1 text-xs text-muted-foreground">卡片已加密保存{cards[channel.id].last4 ? ` · •••• ${cards[channel.id].last4}` : ""}</p>}
                 </TableCell>
                 <TableCell className="font-mono">{channel.feePercent}%</TableCell>
                 <TableCell><p className="font-mono">{stats.total} 个</p>
@@ -195,6 +202,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
                     <Star className={cn("size-4", channel.isFavorite && "fill-amber-400 text-amber-500")} />
                   </Button>}
                   <Button size="sm" variant="ghost" onClick={() => setDetailId(channel.id)}>查看关联</Button>
+                  <Button size="sm" variant="ghost" aria-label={`卡片资料 ${channel.name}`} onClick={() => setCardTarget(channel)}>卡片资料</Button>
                   <Button size="sm" variant="ghost" onClick={() => setDialog({ mode: "edit", channel })}><Pencil className="size-3.5" />编辑</Button>
                   {channel.isActive
                     ? <Button size="sm" variant="ghost" disabled={pending} onClick={() => setArchiveTarget(channel)}><Archive className="size-3.5" />归档</Button>
@@ -215,6 +223,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
 
       <ChannelDialog open={!!dialog} mode={dialog?.mode ?? "add"} channel={dialog?.channel}
         onOpenChange={open => { if (!open) setDialog(null); }} />
+      {cardTarget && <CardDetailsDialog key={cardTarget.id} channel={cardTarget} onClose={() => setCardTarget(null)} onChanged={refreshCards} />}
       <ArchiveDialog channel={archiveTarget} linkedCount={archiveTarget ? usage[archiveTarget.id]?.total ?? 0 : 0}
         onOpenChange={open => { if (!open) setArchiveTarget(null); }} />
       <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetailId(null); }}>

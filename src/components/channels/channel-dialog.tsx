@@ -59,6 +59,7 @@ export function ChannelDialog({ open, mode, channel, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>{mode === "add" ? "新增支付渠道" : "编辑支付渠道"}</DialogTitle>
           <DialogDescription>手续费修改后会重算关联订阅成本；汇率每 5 分钟更新，成本和预计收益随之重算。</DialogDescription>
+          <p className="text-xs text-muted-foreground">完整卡号、CVC、有效期和持卡人资料：保存渠道后，点击列表右侧的“卡片资料”管理。</p>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(save)} className="space-y-5">

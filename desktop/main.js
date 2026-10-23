@@ -1,6 +1,6 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, session, Tray, Notification, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, session, Tray, Notification, nativeImage, clipboard } = require("electron");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -11,6 +11,7 @@ const {
 const { BackupManager, writeJsonAtomic } = require("./backups.js");
 const { maintenanceRunner, requireMaintenanceAdmin } = require("./maintenance.js");
 const { ReminderManager } = require("./reminders.js");
+const { CardVault, installCardVaultHandlers } = require("./card-vault.js");
 const { readBrowserQueue, readQueue, saveQueue, validateQueue, writeBrowserQueue } = require("./offline-queue.js");
 
 const APP_NAME = "订阅管家";
@@ -42,6 +43,7 @@ let backupManager;
 let tray;
 let reminderManager;
 let reminderInterval;
+let cardVault;
 let preferences = { closeToTray: true, notifications: true, closeHintShown: false };
 
 function loadPreferences() {
@@ -312,6 +314,9 @@ async function requestRestorePoint(name) {
   });
 }
 function installMaintenanceHandlers() {
+  cardVault = new CardVault({ userData: app.getPath("userData"), safeStorage, clipboard });
+  installCardVaultHandlers({ ipcMain, vault: cardVault, assertRenderer: assertTrustedRenderer,
+    authorize: assertMaintenanceOwner, ready: () => backendReady && !maintenanceBusy && !isQuitting });
   const handle = (name, handler) => ipcMain.handle(name, (event, ...args) => { assertTrustedRenderer(event); return handler(...args); });
   const owner = (action) => async (token, ...args) => { await assertMaintenanceOwner(token); return action(...args); };
   handle("maintenance:backup", owner(requestBackup));
@@ -451,20 +456,27 @@ async function bootstrap() {
       const response = await fetch(appUrl("/login"), { signal: AbortSignal.timeout(10000), redirect: "manual" });
       if (response.status !== 200) throw new Error(`登录页面检查失败（HTTP ${response.status}）。`);
       if (uiSmokeTest) {
+        installMaintenanceHandlers();
         await require("./ui-smoke.js").runUiSmoke({ BrowserWindow, url: appUrl(), authSecret: config.authSecret,
           userData: userDataDirectory, preload: path.join(__dirname, "preload.js"), existingWindow: mainWindow,
           onWindow: window => { mainWindow = window; }, restartBackend: async () => { await stopBackend(); await startBackend(); } });
+        await require("./card-vault-smoke.js").runCardVaultSmoke({ BrowserWindow, url: appUrl(), userData: userDataDirectory,
+          preload: path.join(__dirname, "preload.js"), onWindow: window => { mainWindow = window; } });
       }
       let maintenance;
       if (maintenanceSmokeTest) {
         setupMaintenance();
+        const privateCards = fs.existsSync(path.join(userDataDirectory, "card-vault.bin"))
+          ? new CardVault({ userData: userDataDirectory, safeStorage, clipboard }).summary() : null;
         const snapshot = path.join(userDataDirectory, "smoke-backup.sbbackup");
         await backupManager.create(snapshot);
         const prepared = await backupManager.prepareRestore(snapshot);
         const restored = await backupManager.restorePrepared(prepared, { stop: stopBackend, start: startBackend });
         const afterRestore = await fetch(appUrl("/login"), { signal: AbortSignal.timeout(10000), redirect: "manual" });
         if (afterRestore.status !== 200) throw new Error("恢复后登录页面检查失败。");
+        if (privateCards && JSON.stringify(new CardVault({ userData: userDataDirectory, safeStorage, clipboard }).summary()) !== JSON.stringify(privateCards)) throw new Error("恢复后的卡片资料校验未通过。");
         maintenance = { encryptedBackup: true, restored: true, rollback: fs.existsSync(restored.rollbackFile) };
+        if (privateCards) maintenance.cardVaultVerified = true;
       }
       fs.writeFileSync(path.join(userDataDirectory, "smoke-result.json"), JSON.stringify({ status: "ok", health: "ok", loginStatus: response.status, version: app.getVersion(), maintenance }, null, 2));
       isQuitting = true;
@@ -523,5 +535,5 @@ else {
   });
   app.whenReady().then(bootstrap);
 }
-app.on("before-quit", () => { isQuitting = true; clearInterval(reminderInterval); tray?.destroy(); stopOwnedServer(); });
+app.on("before-quit", () => { isQuitting = true; cardVault?.dispose(); clearInterval(reminderInterval); tray?.destroy(); stopOwnedServer(); });
 app.on("window-all-closed", () => { if (smokeTest && !isQuitting) return; if (isQuitting || !preferences.closeToTray || !tray) app.quit(); });

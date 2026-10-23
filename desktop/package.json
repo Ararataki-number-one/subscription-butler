@@ -1,6 +1,6 @@
 {
   "name": "subscription-butler-desktop",
-  "version": "4.0.8",
+  "version": "4.1.0",
   "private": true,
   "description": "订阅管家 Windows 桌面软件",
   "main": "main.js",
@@ -24,6 +24,8 @@
       "backups.js",
       "maintenance.js",
       "reminders.js",
+      "card-vault.js",
+      "card-vault-smoke.js",
       "offline-queue.js",
       "ui-smoke.js",
       "setup.html",
