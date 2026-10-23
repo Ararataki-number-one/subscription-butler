@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { SpaceDeleteDialog } from "./space-delete-dialog";
 import type { SpaceFormValue } from "./space-form";
+import { addPeriod } from "@/lib/expiry";
 
 type SpaceDetailActionsProps = {
   space: SpaceFormValue;
@@ -31,6 +32,7 @@ type SpaceDetailActionsProps = {
   childCount: number;
   isEditing?: boolean;
   editFormId?: string;
+  renewalCost: string;
 };
 
 export function SpaceDetailActions({
@@ -39,11 +41,14 @@ export function SpaceDetailActions({
   childCount,
   isEditing = false,
   editFormId,
+  renewalCost,
 }: SpaceDetailActionsProps) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renewOpen, setRenewOpen] = useState(false);
   const [isRenewing, startRenewTransition] = useTransition();
+  const renewalBase = expiryDate || space.currentPeriodStartDate || space.openingDate;
+  const nextExpiry = renewalBase ? addPeriod(renewalBase, { unit: space.periodUnit ?? "month", count: space.periodCount ?? 1 }) : "—";
 
   function onRenew() {
     if (!space.id) return;
@@ -85,9 +90,16 @@ export function SpaceDetailActions({
           <AlertDialogHeader>
             <AlertDialogTitle>确认续费空间</AlertDialogTitle>
             <AlertDialogDescription>
-              将为「{space.name}」按当前订阅周期推进到期日，并按当前汇率计算本期成本。
+              按原周期延长到期日，并保留本期续费记录。
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 border-y py-4 text-sm">
+            <dt className="text-muted-foreground">续费对象</dt><dd className="min-w-0 break-words font-medium">{space.name}</dd>
+            <dt className="text-muted-foreground">当前到期日</dt><dd className="font-mono">{expiryDate || "—"}</dd>
+            <dt className="text-muted-foreground">续费后到期日</dt><dd className="font-mono font-semibold text-primary">{nextExpiry}</dd>
+            <dt className="text-muted-foreground">含手续费成本</dt><dd className="font-mono">{renewalCost}</dd>
+          </dl>
+          <p className="text-xs text-muted-foreground">人民币与美元金额按确认时的汇率折算。</p>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isRenewing}>取消</AlertDialogCancel>
             <Button onClick={onRenew} disabled={isRenewing || !space.id}>
@@ -116,7 +128,7 @@ export function SpaceDetailActions({
               </Link>
             </Button>
           ) : (
-            <Button asChild>
+            <Button asChild variant="outline">
               <Link href={`/spaces/${space.id}?edit=1`}>
                 <Pencil className="size-4" />
                 编辑
@@ -133,7 +145,7 @@ export function SpaceDetailActions({
           <Button
             variant="destructive"
             size="icon"
-            className="size-11"
+            className="size-8"
             aria-label={`删除 ${space.name}`}
             onClick={() => setDeleteOpen(true)}
           >

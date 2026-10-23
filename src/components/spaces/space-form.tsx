@@ -196,7 +196,7 @@ function SpaceEditorForm({
     if (selectedCurrencyMeta) feePreview = paymentFee(parseToMinor(amountInput, selectedCurrencyMeta.minorUnit), selectedFeePercent);
   } catch { /* Wait for a complete, valid amount before showing the total. */ }
   const detailCellClass = isDetailLayout
-    ? "min-h-[92px] rounded-md border bg-muted/20 p-3"
+    ? "space-y-2 border-b border-border/60 pb-4"
     : undefined;
 
   function setCountryAndCurrency(countryCode: string) {
@@ -266,7 +266,7 @@ function SpaceEditorForm({
         className={cn(
           "grid",
           isDetailLayout
-            ? "gap-6 md:grid-cols-2 xl:grid-cols-3"
+            ? "gap-x-6 gap-y-4 md:grid-cols-2 2xl:grid-cols-3"
             : "gap-4 md:grid-cols-2",
         )}
       >
@@ -287,7 +287,7 @@ function SpaceEditorForm({
               <FormItem className={detailCellClass}>
                 <FormLabel>订阅类型</FormLabel>
                 <Select value={field.value ?? "team"} onValueChange={field.onChange}>
-                  <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger className="w-full"><SelectValue>{SPACE_PLAN_OPTIONS.find(option => option.value === (field.value ?? "team"))?.label}</SelectValue></SelectTrigger></FormControl>
                   <SelectContent>{SPACE_PLAN_OPTIONS.map(option => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}</SelectContent>
@@ -339,7 +339,7 @@ function SpaceEditorForm({
                   >
                     <FormControl>
                       <SelectTrigger
-                        className={cn(isDetailLayout ? "h-10" : "h-12", "w-full")}
+                        className="h-9 w-full"
                       >
                         <span className="flex min-w-0 flex-1 items-center justify-between gap-3 leading-tight">
                           <span className="min-w-0 truncate text-left">
@@ -348,7 +348,7 @@ function SpaceEditorForm({
                           {isDetailLayout ? null : (
                             <span className="ml-auto max-w-[55%] shrink-0 truncate text-right font-mono text-xs text-muted-foreground">
                               {selectedCountryOption
-                                ? `${selectedCountryOption.symbol} ${selectedCountryOption.currencyCode} · ${selectedCountryOption.currencyName}`
+                                ? selectedCountryOption.currencyCode
                                 : "选择后自动填充币种"}
                             </span>
                           )}
@@ -429,7 +429,7 @@ function SpaceEditorForm({
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{availableChannels.find(channel => channel.id === field.value)?.name ?? "选择支付渠道"}</SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -471,7 +471,7 @@ function SpaceEditorForm({
                   {isDetailLayout ? null : (
                     <p className="text-xs text-muted-foreground">
                       {selectedCurrencyMeta
-                        ? `${selectedCurrencyMeta.symbol} ${selectedCurrencyMeta.code} 使用 ${selectedCurrencyMeta.minorUnit} 位小数作为最小单位。`
+                        ? `${selectedCurrencyMeta.name}金额，${selectedCurrencyMeta.minorUnit === 0 ? "请填写整数" : "最多 " + selectedCurrencyMeta.minorUnit + " 位小数"}。`
                         : "金额会按所选币种的最小单位保存。"}
                     </p>
                   )}
@@ -491,7 +491,7 @@ function SpaceEditorForm({
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">
-                        <SelectValue />
+                        <SelectValue>{selectedCurrencyMeta?.symbol} {field.value}</SelectValue>
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -537,7 +537,7 @@ function SpaceEditorForm({
             <div
               className={cn(
                 isDetailLayout
-                  ? "min-h-[92px] space-y-2 rounded-md border bg-muted/20 p-3"
+                  ? "space-y-2 border-b border-border/60 pb-4"
                   : "grid grid-cols-[1fr_120px] gap-2",
               )}
             >
@@ -561,7 +561,7 @@ function SpaceEditorForm({
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue />
+                        <SelectValue>{PERIOD_LABELS[field.value]}</SelectValue>
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -604,7 +604,7 @@ function SpaceEditorForm({
               <p
                 className={cn(
                   "text-sm text-destructive",
-                  isDetailLayout ? "md:col-span-2 xl:col-span-3" : "md:col-span-2",
+                  isDetailLayout ? "md:col-span-2 2xl:col-span-3" : "md:col-span-2",
                 )}
               >
                 {form.formState.errors.root.message}
@@ -674,7 +674,7 @@ export function SpaceForm({
         <DialogHeader>
           <DialogTitle>{mode === "add" ? "新增空间 / 账号" : "编辑空间 / 账号"}</DialogTitle>
           <DialogDescription>
-            选择订阅类型，记录成本和周期。Business 管理母号与子账号；Pro 可选择单人使用或多人拼车。
+            记录账号、支付成本和订阅周期；保存后自动计算到期日。
           </DialogDescription>
         </DialogHeader>
         <SpaceEditorForm

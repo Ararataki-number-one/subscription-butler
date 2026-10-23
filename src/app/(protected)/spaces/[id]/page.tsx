@@ -16,6 +16,7 @@ import { isIndependentPlan, isProPlan, spacePlanLabel } from "@/lib/space-plans"
 import { getAccountEarnings } from "@/db/teamEarnings";
 import { AccountManagementCard } from "@/components/spaces/account-management-card";
 import { formatCountryLabel } from "@/lib/countries";
+import { paymentFee } from "@/lib/payment-fees";
 import { formatCurrencyMinor } from "@/lib/currencies";
 import { MoneyDisplay } from "@/components/money-display";
 import { Button } from "@/components/ui/button";
@@ -61,17 +62,17 @@ function DetailItem({
   return (
     <div
       className={[
-        "flex min-w-0 items-baseline gap-2 border-b border-border/40 py-2",
+        "flex min-w-0 items-start gap-3 border-b border-border/50 py-2.5",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      <div className="flex w-24 shrink-0 items-center gap-1">
+      <div className="flex w-28 shrink-0 items-center gap-1 pt-0.5">
         <p className="text-xs text-muted-foreground">{label}</p>
         {action}
       </div>
-      <div className="min-w-0 break-all text-sm font-medium">{children}</div>
+      <div className="min-w-0 break-words text-sm font-medium leading-6">{children}</div>
     </div>
   );
 }
@@ -131,24 +132,25 @@ export default async function SpaceDetailPage({
   const editFormId = `space-${space.id}-detail-edit-form`;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 py-7 sm:px-6 lg:px-8">
-      <div className="sticky top-14 z-20 -mx-4 -mt-7 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 border-b bg-background/95 px-4 py-4 backdrop-blur-lg sm:relative sm:top-0 sm:mx-0 sm:mt-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:rounded-lg sm:border sm:bg-card">
-        <Button asChild variant="outline" className="h-9 gap-2 px-3">
-          <Link href="/spaces">
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="sticky top-14 z-20 flex flex-wrap items-center gap-3 rounded-lg border bg-card/95 p-3 backdrop-blur-lg">
+        <Button asChild variant="ghost" className="h-8 gap-2 px-2">
+          <Link href="/spaces" aria-label="返回列表">
             <ArrowLeft aria-hidden="true" className="size-4" />
-            返回列表
+            <span className="hidden sm:inline">返回列表</span>
           </Link>
         </Button>
-        <h1 className="col-span-2 row-start-2 min-w-0 truncate text-center text-xl font-semibold tracking-tight sm:absolute sm:left-1/2 sm:col-span-1 sm:row-start-1 sm:max-w-[52vw] sm:-translate-x-1/2 sm:text-2xl">
+        <h1 className="min-w-0 flex-1 break-words text-xl font-semibold tracking-tight sm:text-2xl">
           {space.name}
         </h1>
-        <div className="col-start-2 row-start-1 flex items-center gap-2 justify-self-end sm:col-start-3">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
           <SpaceDetailActions
             space={formValue}
             expiryDate={space.expiryDate}
             childCount={childAccounts.length}
             isEditing={isEditing}
             editFormId={editFormId}
+            renewalCost={formatCurrencyMinor(paymentFee(space.amountMinor, paymentChannel.feePercent ?? "0").totalAmountMinor, currency)}
           />
         </div>
       </div>
@@ -157,7 +159,7 @@ export default async function SpaceDetailPage({
         <CardHeader className="border-b">
           <CardTitle>{isEditing ? "编辑订阅" : `${spacePlanLabel(space.planType, space.customPlanName)} · ${independent ? "账号详情" : "空间详情"}`}</CardTitle>
           {isEditing && <CardDescription>
-            修改空间资料后会重新计算到期日；金额或币种变化会重新计算记账成本。
+            修改资料会重算到期日；金额或币种变化会重算记账成本。
           </CardDescription>}
           <CardAction>
             <ExpiryBadge
@@ -176,46 +178,52 @@ export default async function SpaceDetailPage({
               formId={editFormId}
             />
           ) : (
-            <div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
-              {isProPlan(space.planType) && <DetailItem label="Pro 使用方式"><span>拼车</span></DetailItem>}
-              <DetailItem label={independent ? "账号邮箱 / 登录名" : "母号"}>
-                <span>{motherAccount.email}</span>
+            <div className="space-y-4">
+              <section aria-label="账号资料"><h3 className="text-sm font-semibold">账号资料</h3><div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
+<DetailItem label={independent ? "账号邮箱 / 登录名" : "母号"} className="md:col-span-2 max-sm:flex-col max-sm:gap-1 max-sm:[&>div:first-child]:w-auto">
+                <span className="break-all font-mono">{motherAccount.email}</span>
               </DetailItem>
-              {independent && <DetailItem label="联系方式"><span>{space.contact || "—"}</span></DetailItem>}
-              <DetailItem label="国家/地区">
+<DetailItem label="国家/地区">
                 <span>{formatCountryLabel(space.country)}</span>
               </DetailItem>
-              <DetailItem label="支付渠道">
+{independent && <DetailItem label="联系方式"><span>{space.contact || "—"}</span></DetailItem>}
+{isProPlan(space.planType) && <DetailItem label="Pro 使用方式"><span>拼车</span></DetailItem>}
+              </div></section>
+              <section aria-label="支付与成本"><h3 className="text-sm font-semibold">支付与成本</h3><div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
+<DetailItem label="支付渠道">
                 <span>{paymentChannel.name}</span>
               </DetailItem>
-              <DetailItem label="订阅成本（原币）">
+<DetailItem label="订阅成本（原币）">
                 <span className="font-mono">
                   {formatCurrencyMinor(space.amountMinor, currency)}
                 </span>
               </DetailItem>
-              <DetailItem label="首次开通日">
+<DetailItem label="支付手续费">
+                <span className="font-mono">{space.feePercent}% · {formatCurrencyMinor(space.feeAmountMinor, currency)}</span>
+              </DetailItem>
+<DetailItem label="含手续费合计">
+                <span className="font-mono">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}</span>
+              </DetailItem>
+<DetailItem label="记账金额" action={<FrozenAmountHelp className="-my-1" />}>
+                <MoneyDisplay compact value={space.amountUsd} cnyRate={cnyDisplayRate} />
+              </DetailItem>
+              </div></section>
+              <section aria-label="周期与续费"><h3 className="text-sm font-semibold">周期与续费</h3><div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
+<DetailItem label="首次开通日">
                 <span className="font-mono">{space.openingDate ?? "-"}</span>
               </DetailItem>
-              <DetailItem label="当前周期开始日">
+<DetailItem label="当前周期开始日">
                 <span className="font-mono">
                   {space.currentPeriodStartDate ?? space.openingDate ?? "-"}
                 </span>
               </DetailItem>
-              <DetailItem label="订阅周期">
+<DetailItem label="订阅周期">
                 <span>{formatPeriodLabel(space.periodUnit, space.periodCount)}</span>
               </DetailItem>
-              <DetailItem label="支付手续费">
-                <span className="font-mono">{space.feePercent}% · {formatCurrencyMinor(space.feeAmountMinor, currency)}</span>
-              </DetailItem>
-              <DetailItem label="含手续费合计">
-                <span className="font-mono">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}</span>
-              </DetailItem>
-              <DetailItem label="到期日">
+<DetailItem label="到期日">
                 <span className="font-mono">{space.expiryDate ?? "-"}</span>
               </DetailItem>
-              <DetailItem label="记账金额" action={<FrozenAmountHelp className="-my-1" />}>
-                <MoneyDisplay compact value={space.amountUsd} cnyRate={cnyDisplayRate} />
-              </DetailItem>
+              </div></section>
             </div>
           )}
 

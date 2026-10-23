@@ -167,9 +167,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
           </Button>}
         </div>
         <CardDescription className="text-xs">
-          {business ? "母号与子账号在此统一管理。" : "只管理拼车成员的出租资料和收益。"}
-          金额按月折算，人民币优先、美元补充。
-          {business ? "成本按登记位置均摊。" : "成本按参与成员分摊。"}
+          {business ? "成本按登记位置均摊" : "成本按参与成员分摊"} · 人民币 / 美元 · 金额按月折算
         </CardDescription>
         {earnings.unmarkedCount > 0 && <p className="text-sm text-amber-700 dark:text-amber-300">有位置尚未标记用途，当前收益仅包含已知约定收入。</p>}
       </CardHeader>
@@ -178,7 +176,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
           {[{ label: "总约定收入 / 月", value: earnings.monthlyIncomeUsd },
             { label: spacePlanLabel(earnings.planType) + " 成本 / 月", value: earnings.monthlyCostUsd },
             { label: "预计净收益 / 月", value: earnings.monthlyNetUsd }].map(item =>
-            <div key={item.label} className="border-b pb-3"><p className="text-xs text-muted-foreground">{item.label}</p>
+            <div key={item.label} className="pb-2"><p className="text-xs text-muted-foreground">{item.label}</p>
               <p className={cn("mt-1 text-lg font-semibold", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className="flex-wrap" value={item.value} cnyRate={cnyRate} /></p></div>)}
         </div>
         <div className={cn("grid gap-3", business && "xl:grid-cols-2")}>
@@ -226,7 +224,6 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
               </div>;
             })}</div> : <div className="space-y-3 py-5 text-center text-sm text-muted-foreground">
               <p>{business ? "子账号位置空闲。" : "还没有拼车成员，添加后可分别记录收费和使用状态。"}</p>
-              <Button size="sm" variant="outline" onClick={() => editMember()}>新增{memberLabel}</Button>
             </div>}
           </section>}
         </div>
@@ -234,7 +231,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
       <Dialog open={editor !== null} onOpenChange={open => { if (!open && !pending) setEditor(null); }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>{editor?.role === "mother" ? "编辑" + motherLabel : (editor?.account ? "编辑" : "新增") + memberLabel}</DialogTitle>
-            <DialogDescription>账号资料、使用状态、收费和周期在这里一次保存。</DialogDescription></DialogHeader>
+            <DialogDescription>修改约定收费不会自动登记收款。</DialogDescription></DialogHeader>
           <form onSubmit={save}><fieldset disabled={pending} className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="account-email">{editor?.role === "mother" || business ? "邮箱 / 登录名" : "成员姓名 / 账号"}</Label>
               <Input id="account-email" value={email} required onChange={event => setEmail(event.target.value)} /></div>
