@@ -5,6 +5,7 @@ import { Copy, Eye, EyeOff, LockKeyhole, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { EMPTY_CARD, type CardDetails } from "@/lib/card-details";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -28,6 +29,11 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  function requestClose() {
+    if (pending) return;
+    if (dirty) { setRevealed(false); setConfirmDelete(false); setConfirmDiscard(true); } else onClose();
+  }
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState("");
@@ -73,20 +79,21 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
     try { await window.teamAccountManagerDesktop!.cardVault.copy(channel.id, field); toast.success("已复制，30 秒后自动清除未被替换的剪贴板内容"); }
     catch { toast.error("复制失败，请重试。"); }
   }
-  return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}>
-    <DialogContent className="sm:max-w-[38rem]" onInteractOutside={event => { if (dirty || pending) event.preventDefault(); }}>
-      <DialogHeader><DialogTitle>{channel.name} · 卡片资料</DialogTitle>
+  return <><Dialog open onOpenChange={open => { if (!open) requestClose(); }}>
+    <DialogContent className="flex flex-col overflow-hidden sm:max-w-[52rem]" onInteractOutside={event => { if (dirty || pending) event.preventDefault(); }}>
+      <DialogHeader className="shrink-0"><DialogTitle>{channel.name} · 卡片资料</DialogTitle>
         <DialogDescription>本机加密保存，可随加密备份恢复。</DialogDescription>
       </DialogHeader>
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1"><LockKeyhole className="size-3.5" />{revision ? "已加密保存" : "尚未保存卡片资料"}{dirty ? " · 有未保存修改" : ""}</span>
         <Button type="button" size="sm" variant="outline" disabled={loading || pending} onClick={() => setRevealed(value => !value)}>
           {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{revealed ? "隐藏资料" : "显示资料"}
         </Button>
       </div>
-      <form autoComplete="off" onSubmit={event => { event.preventDefault(); void save(); }}>
-        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-          {FIELDS.map(field => <div key={field.key} className={field.wide ? "sm:col-span-2" : ""}>
+      <form className="flex min-h-0 flex-col" autoComplete="off" onSubmit={event => { event.preventDefault(); void save(); }}>
+        <div className="min-h-0 overflow-y-auto pr-1">
+        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="grid gap-x-4 gap-y-3 sm:grid-cols-2 md:grid-cols-3">
+          {FIELDS.map(field => <div key={field.key} className={field.wide ? "sm:col-span-2 md:col-span-3" : ""}>
             <label htmlFor={`card-${field.key}`} className="mb-1.5 block text-sm font-medium">{field.label}</label>
             <div className="flex gap-1.5">
               <Input id={`card-${field.key}`} name={field.key} type={revealed ? "text" : "password"} autoComplete="off" spellCheck={false}
@@ -107,12 +114,18 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
             <Button type="button" size="sm" variant="destructive" disabled={pending} onClick={() => void remove()}>确认删除卡片资料</Button>
           </div>
         </div>}
-        <DialogFooter className="mt-5">
+        </div>
+        <DialogFooter className="mt-4 shrink-0 bg-popover">
           {revision && <Button type="button" variant="ghost" className="text-destructive sm:mr-auto" disabled={pending} onClick={() => setConfirmDelete(true)}><Trash2 className="size-4" />删除卡片资料</Button>}
-          <Button type="button" variant="outline" disabled={pending} onClick={onClose}>关闭</Button>
+          <Button type="button" variant="outline" disabled={pending} onClick={requestClose}>关闭</Button>
           <Button type="submit" disabled={loading || pending || !dirty}>{pending ? "保存中…" : "加密保存"}</Button>
         </DialogFooter>
       </form>
     </DialogContent>
-  </Dialog>;
+  </Dialog>
+  <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+    <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>放弃未保存的修改？</AlertDialogTitle><AlertDialogDescription>当前修改还没有加密保存。继续编辑可保留已填写的内容。</AlertDialogDescription></AlertDialogHeader>
+      <AlertDialogFooter><AlertDialogCancel>继续编辑</AlertDialogCancel><Button variant="destructive" onClick={onClose}>放弃修改</Button></AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog></>;
 }
