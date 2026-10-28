@@ -161,7 +161,7 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
               </Label>
               <Switch
                 id="mfaEnabled"
-                checked={enabled || Boolean(enrollment)}
+                checked={enabled}
                 onCheckedChange={changeMfaEnabled}
                 disabled={isPending}
                 aria-label="开启多重身份验证"
@@ -198,7 +198,7 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
         }}
       >
         <DialogContent
-          className="gap-0 overflow-hidden rounded-xl p-0 sm:max-w-md"
+          className="gap-0 overflow-x-hidden overflow-y-auto rounded-xl p-0 sm:max-w-2xl"
           showCloseButton={false}
         >
           <div className="px-5 pb-5 pt-7 sm:px-7 sm:pb-7">
@@ -215,8 +215,8 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
             </DialogHeader>
 
             {enrollment ? (
-              <div className="mt-6 space-y-5">
-                <div className="flex justify-center">
+              <div className="mt-5 grid gap-5 sm:grid-cols-[200px_minmax(0,1fr)]">
+                <div className="flex justify-center sm:row-span-3 sm:self-start">
                   <div className="overflow-hidden rounded-xl bg-white p-3 ring-1 ring-border">
                     <Image
                       src={enrollment.qrCodeDataUrl}
@@ -229,7 +229,7 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 sm:col-start-2">
                   <Label>无法扫描？手动输入密钥</Label>
                   <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
                     <code className="min-w-0 flex-1 break-all text-xs font-semibold tracking-wider">
@@ -247,7 +247,7 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
                   </div>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 sm:col-start-2">
                   <Label className="block text-center">6 位动态安全码</Label>
                   <MfaCodeInput
                     value={code}
@@ -261,12 +261,12 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
                 </div>
 
                 {error ? (
-                  <p role="alert" className="text-center text-sm text-destructive">
+                  <p role="alert" className="text-center text-sm text-destructive sm:col-start-2">
                     {error}
                   </p>
                 ) : null}
 
-                <div className="grid gap-2 pt-1">
+                <div className="grid gap-2 pt-1 sm:col-start-2">
                   <Button
                     type="button"
                     size="lg"
@@ -298,7 +298,7 @@ export function MfaSettings({ status }: { status: MfaStatus }) {
         }}
       >
         <DialogContent
-          className="gap-0 overflow-hidden rounded-xl p-0 sm:max-w-md"
+          className="gap-0 overflow-x-hidden overflow-y-auto rounded-xl p-0 sm:max-w-md"
           showCloseButton={false}
         >
           <div className="px-5 pb-5 pt-7 sm:px-7 sm:pb-7">

@@ -81,6 +81,12 @@ export function StatusThresholdForm({
     templateBody: emailReminder.templateBody,
   });
 
+  const [savedThreshold, setSavedThreshold] = useState(thresholdDraft);
+  const [savedEmail, setSavedEmail] = useState(emailDraft);
+  const [templateDirty, setTemplateDirty] = useState(false);
+  const thresholdDirty = JSON.stringify(thresholdDraft) !== JSON.stringify(savedThreshold);
+  const emailDirty = templateDirty || JSON.stringify(emailDraft) !== JSON.stringify(savedEmail);
+
   function updateThresholdDraft(
     key: keyof typeof thresholdDraft,
     value: string,
@@ -95,11 +101,13 @@ export function StatusThresholdForm({
       syncPreview({ ...currentEmailDraft(), templateSubject: String(value) });
     }
     setEmailError(null);
+    if (key === "enabled" && value === true) requestAnimationFrame(() => document.getElementById("space-email-settings")?.scrollIntoView({ block: "start", behavior: "instant" }));
   }
 
   function onTemplateBodyInput() {
     templateBodyDraftRef.current = templateBodyRef.current?.innerHTML ?? "";
     syncPreview();
+    setTemplateDirty(templateBodyDraftRef.current !== savedEmail.templateBody);
     setEmailError(null);
   }
 
@@ -164,6 +172,7 @@ export function StatusThresholdForm({
       });
 
       if (res.ok) {
+        setSavedThreshold({ ...thresholdDraft });
         toast.success("已保存状态阈值");
       } else {
         setThresholdError(res.error);
@@ -179,6 +188,9 @@ export function StatusThresholdForm({
       const res = await updateSpaceEmailReminderSettings(currentEmailDraft());
 
       if (res.ok) {
+        setSavedEmail({ ...currentEmailDraft() });
+        setEmailDraft(currentEmailDraft());
+        setTemplateDirty(false);
         toast.success("已保存空间邮件提醒");
       } else {
         setEmailError(res.error);
@@ -219,10 +231,10 @@ export function StatusThresholdForm({
   }
 
   return (
-    <div className="grid gap-4">
-      <Card>
+    <div className="contents">
+      <Card className="lg:col-span-2">
         <CardHeader className="border-b">
-          <CardTitle>到期提醒提前天数</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>到期提醒提前天数</CardTitle><span role="status" className="text-xs text-muted-foreground">{isThresholdPending ? "保存中…" : thresholdDirty ? "待保存" : "已保存"}</span></div>
         </CardHeader>
         <CardContent>
           <form onSubmit={onThresholdSubmit} className="space-y-5">
@@ -286,9 +298,9 @@ export function StatusThresholdForm({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="space-email-settings" className={emailDraft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
         <CardHeader className="border-b">
-          <CardTitle>空间邮件提醒</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>空间邮件提醒</CardTitle><span role="status" className="text-xs text-muted-foreground">{isEmailPending ? "保存中…" : emailDirty ? "待保存" : savedEmail.enabled ? "已开启" : "已关闭"}</span></div>
           <CardDescription>未续费空间进入到期提醒窗口后，每天按指定时间发送。</CardDescription>
         </CardHeader>
         <CardContent>
@@ -312,6 +324,7 @@ export function StatusThresholdForm({
 
             {emailDraft.enabled ? (
               <>
+                <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="spaceEmailRecipient">接收邮箱</Label>
                   <Input
@@ -338,6 +351,7 @@ export function StatusThresholdForm({
                   />
                 </div>
 
+                </div>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label htmlFor="spaceEmailSmtpUrl">SMTP URL</Label>
@@ -551,7 +565,7 @@ export function StatusThresholdForm({
             ) : null}
 
             {emailError ? (
-              <p className="text-sm text-destructive">{emailError}</p>
+              <p role="alert" className="text-sm text-destructive">{emailError}</p>
             ) : null}
 
             <div className="flex flex-wrap gap-2">

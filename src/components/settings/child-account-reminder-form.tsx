@@ -69,17 +69,23 @@ export function ChildAccountReminderForm({
     templateBody: settings.templateBody,
   });
 
+  const [savedDraft, setSavedDraft] = useState(draft);
+  const [templateDirty, setTemplateDirty] = useState(false);
+  const dirty = templateDirty || JSON.stringify(draft) !== JSON.stringify(savedDraft);
+
   function updateDraft(key: keyof typeof draft, value: boolean | string) {
     setDraft((current) => ({ ...current, [key]: value }));
     if (key === "templateSubject") {
       syncPreview({ ...currentDraft(), templateSubject: String(value) });
     }
     setError(null);
+    if (key === "enabled" && value === true) requestAnimationFrame(() => document.getElementById("child-email-settings")?.scrollIntoView({ block: "start", behavior: "instant" }));
   }
 
   function onTemplateBodyInput() {
     templateBodyDraftRef.current = templateBodyRef.current?.innerHTML ?? "";
     syncPreview();
+    setTemplateDirty(templateBodyDraftRef.current !== savedDraft.templateBody);
     setError(null);
   }
 
@@ -136,6 +142,9 @@ export function ChildAccountReminderForm({
       const res = await updateChildAccountEmailReminderSettings(currentDraft());
 
       if (res.ok) {
+        setSavedDraft({ ...currentDraft() });
+        setDraft(currentDraft());
+        setTemplateDirty(false);
         toast.success("已保存子账号邮件提醒");
       } else {
         setError(res.error);
@@ -173,9 +182,9 @@ export function ChildAccountReminderForm({
   }
 
   return (
-    <Card>
+    <Card id="child-email-settings" className={draft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
       <CardHeader className="border-b">
-        <CardTitle>子账号邮件提醒</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>子账号邮件提醒</CardTitle><span role="status" className="text-xs text-muted-foreground">{isPending ? "处理中…" : dirty ? "待保存" : savedDraft.enabled ? "已开启" : "已关闭"}</span></div>
         <CardDescription>
           非自用子账号在下一付款日当天按指定时间发送一次，接收邮箱必填。
         </CardDescription>
@@ -198,6 +207,7 @@ export function ChildAccountReminderForm({
 
         {draft.enabled ? (
           <>
+            <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="childAccountEmailRecipient">
                 自己的接收邮箱
@@ -224,6 +234,7 @@ export function ChildAccountReminderForm({
               />
             </div>
 
+            </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="childAccountEmailSmtpUrl">SMTP URL</Label>
@@ -429,7 +440,7 @@ export function ChildAccountReminderForm({
           </>
         ) : null}
 
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
         <div className="flex flex-wrap gap-2">
           <Button type="button" onClick={onSaveSettings} disabled={isPending}>

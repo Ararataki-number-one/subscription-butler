@@ -19,14 +19,14 @@ export default function SettingsPage() {
   const mfaStatus = getMfaStatus(db);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">设置</h1>
 
       </div>
 
       <nav aria-label="设置分类" className="flex gap-4 border-b pb-3 text-sm text-primary"><a className="underline-offset-4 hover:underline" href="#expiry-settings">到期与邮件提醒</a><a className="underline-offset-4 hover:underline" href="#security-settings">登录安全</a></nav>
-      <section id="expiry-settings" className="scroll-mt-20 space-y-4">
+      <section id="expiry-settings" className="grid scroll-mt-20 items-start gap-4 lg:grid-cols-2">
       <StatusThresholdForm
         thresholds={thresholds}
         emailReminder={emailReminder}
