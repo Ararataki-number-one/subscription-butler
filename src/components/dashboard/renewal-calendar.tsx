@@ -12,6 +12,7 @@ import { freezeUsdMinor, formatMinor } from "@/lib/money";
 import { paymentFee } from "@/lib/payment-fees";
 import { MoneyDisplay } from "@/components/money-display";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const daysFrom = (date: string, today: string) => Math.round((Date.parse(date + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
@@ -35,6 +36,11 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const refreshing = useRef(false);
+  const selectionTrigger = useRef<HTMLButtonElement | null>(null);
+  function selectEntry(entry: RenewalCalendarEntry, trigger: HTMLButtonElement) {
+    selectionTrigger.current = trigger;
+    setSelected(keyOf(entry));
+  }
   const refresh = useCallback(async () => {
     if (refreshing.current) return;
     refreshing.current = true; setBusy(true);
@@ -75,7 +81,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     } catch (failure) { setError(failure instanceof Error ? failure.message : "续费未完成，请重试。"); }
     finally { refreshing.current = false; setBusy(false); }
   }
-  function amount(entry: RenewalCalendarEntry) {
+  function amount(entry: RenewalCalendarEntry, detail = false) {
     const sub = snapshot.subscriptions.find(row => row.id === entry.subRecordId)?.data;
     const rental = entry.kind === "rental" ? snapshot.rentals.find(row => row.id === entry.recordId)?.data : null;
     const historical = entry.completed ? entry.kind === "subscription"
@@ -88,7 +94,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     if (currency === undefined || native === undefined) return "当时金额未登记";
     const quote = quotes.find(row => row.currency === currency);
     const minorUnit = CURRENCIES.find(row => row.code === currency)?.minorUnit ?? 2;
-    return <>{historical ? <span className="inline-flex flex-col gap-1"><span className="font-mono tabular-nums">{historical.data.cnyMinor === null ? "人民币未登记" : "¥" + formatMinor(historical.data.cnyMinor, 2)}</span><span className="font-mono text-xs text-muted-foreground">${formatMinor(historical.data.usdMinor, 2)} USD</span></span> : entry.completed ? <span className="font-mono">{formatMinor(native, minorUnit)} {currency}</span> : <MoneyDisplay value={quote ? freezeUsdMinor(native, minorUnit, quote.rateToUsd) : null} cnyRate={cnyQuote ? { rateToUsd: cnyQuote.rateToUsd, minorUnit: cnyQuote.minorUnit } : null}/>}<small className="mt-1 block text-xs text-muted-foreground">{formatMinor(native, minorUnit)} {currency} · {entry.kind === "subscription" ? "订阅成本" : "约定收费"}</small></>;
+    return <>{historical ? <span className="inline-flex flex-col gap-1"><span className="font-mono tabular-nums">{historical.data.cnyMinor === null ? "人民币未登记" : "¥" + formatMinor(historical.data.cnyMinor, 2)}</span><span className="font-mono text-xs text-muted-foreground">${formatMinor(historical.data.usdMinor, 2)} USD</span></span> : entry.completed ? <span className="font-mono">{formatMinor(native, minorUnit)} {currency}</span> : <MoneyDisplay value={quote ? freezeUsdMinor(native, minorUnit, quote.rateToUsd) : null} cnyRate={cnyQuote ? { rateToUsd: cnyQuote.rateToUsd, minorUnit: cnyQuote.minorUnit } : null}/>}<small className="mt-1 block text-xs text-muted-foreground">{!(detail && currency === "USD" && (historical || !entry.completed)) && <>{formatMinor(native, minorUnit)} {currency} · </>}{entry.kind === "subscription" ? "订阅成本" : "约定收费"}</small></>;
   }
   function table(rows: RenewalCalendarEntry[], label: string) {
     return <div className="overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[760px] text-left text-sm" aria-label={label}>
@@ -97,7 +103,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
         const state = renewalCalendarStatus(entry, today, soonDays), style = renewalStyles[state], days = daysFrom(entry.date, today);
         return <tr className="border-b last:border-0" key={keyOf(entry)} data-renewal-id={entry.recordId} data-renewal-date={entry.date} data-renewal-state={state} data-renewal-kind={entry.kind}>
           <td className="px-4 py-3"><span className={`whitespace-nowrap rounded-md border px-2 py-1 text-xs ${style.color}`}>{style.label}</span></td>
-          <td className="px-4 py-3"><button className="text-left font-medium text-primary hover:underline" onClick={() => setSelected(keyOf(entry))}>{entry.account || entry.customerName || entry.name}</button><small className="mt-1 block text-xs text-muted-foreground">{roleLabel(entry)}{entry.customerName ? " · " + entry.customerName : ""}</small></td>
+          <td className="px-4 py-3"><button className="text-left font-medium text-primary hover:underline" aria-haspopup="dialog" onClick={event => selectEntry(entry, event.currentTarget)}>{entry.account || entry.customerName || entry.name}</button><small className="mt-1 block text-xs text-muted-foreground">{roleLabel(entry)}{entry.customerName ? " · " + entry.customerName : ""}</small></td>
           <td className="px-4 py-3">{entry.name}<small className="mt-1 block text-xs text-muted-foreground">{entry.planName}</small></td><td className="whitespace-nowrap px-4 py-3 font-mono">{entry.date}</td>
           <td className="whitespace-nowrap px-4 py-3">{entry.completed ? "已延至 " + entry.nextDueDate : days < 0 ? `逾期 ${-days} 天` : days === 0 ? "今天到期" : `${days} 天后到期`}</td><td className="px-4 py-3">{amount(entry)}</td>
           <td className="px-4 py-3">{entry.completed ? <span className="whitespace-nowrap text-sm font-medium text-emerald-700">✓ 已续费</span> : <Button variant="outline" size="sm" disabled={busy} title="确认本期已续费，并按原周期延长一期" onClick={() => void markRenewed(entry)}>已续费</Button>}</td>
@@ -111,13 +117,13 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     const week = Math.floor((leading + index) / 7);
     const occupiedWeek = inMonth.some(entry => Math.floor((leading + Number(entry.date.slice(-2)) - 1) / 7) === week);
     return <div key={date} data-calendar-date={date} className={`flex ${occupiedWeek ? "h-20" : "h-14"} min-w-0 flex-col rounded-md border bg-card p-1.5 ${date === today ? "border-primary ring-1 ring-primary/20" : ""}`}>
-      <div className="mb-1 flex shrink-0 items-center gap-1 text-xs font-medium"><span>{Number(date.slice(-2))}</span>{date === today && <span className="text-xs text-primary">今天</span>}{events.length > 0 && <span className="ml-auto text-xs font-normal text-muted-foreground">{events.length} 项</span>}</div>
-      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain">
+      <div className="mb-1 flex shrink-0 items-center gap-1 text-xs font-medium"><span>{Number(date.slice(-2))}</span>{date === today && <span className="text-xs text-primary">今天</span>}{events.length > 0 && <span className="ml-auto text-xs font-normal text-muted-foreground" title={events.length > 2 ? "在日期内上下滚动查看全部事项" : undefined}>{events.length} 项{events.length > 2 ? " ↕" : ""}</span>}</div>
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain" tabIndex={events.length > 2 ? 0 : undefined} role={events.length > 2 ? "region" : undefined} aria-label={events.length > 2 ? `${date} 共 ${events.length} 项，上下滚动查看` : undefined}>
         {events.map(entry => {
           const account = entry.account || entry.customerName || entry.slotLabel || "账号未登记";
           const state = renewalCalendarStatus(entry, today, soonDays), style = renewalStyles[state];
           const description = [style.label, entry.name, roleLabel(entry), account, entry.customerName].filter(Boolean).join(" · ");
-          return <button key={keyOf(entry)} data-calendar-entry={keyOf(entry)} data-calendar-record-id={entry.recordId} data-calendar-occurrence-date={entry.date} data-renewal-state={state} title={description} aria-label={description} className={`flex h-5 w-full min-w-0 items-center gap-1 rounded border px-1.5 text-left text-xs leading-tight hover:border-primary ${style.color}`} onClick={() => setSelected(keyOf(entry))}><span className="min-w-0 flex-1 truncate font-medium lg:max-w-[40%]">{entry.name}</span><span className="hidden min-w-0 flex-1 truncate lg:inline">{account}</span>{entry.completed && <span aria-hidden="true" className="shrink-0">✓</span>}</button>;
+          return <button key={keyOf(entry)} data-calendar-entry={keyOf(entry)} data-calendar-record-id={entry.recordId} data-calendar-occurrence-date={entry.date} data-renewal-state={state} title={description} aria-label={description} className={`flex h-5 w-full min-w-0 items-center gap-1 rounded border px-1.5 text-left text-xs leading-tight hover:border-primary ${style.color}`} aria-haspopup="dialog" onClick={event => selectEntry(entry, event.currentTarget)}><span className="min-w-0 flex-1 truncate font-medium lg:max-w-[40%]">{entry.name}</span><span className="hidden min-w-0 flex-1 truncate lg:inline">{account}</span>{entry.completed && <span aria-hidden="true" className="shrink-0">✓</span>}</button>;
         })}
       </div>
     </div>;
@@ -130,7 +136,29 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     <p className="mb-2 text-sm text-muted-foreground">本月 {inMonth.length} 项 · 已续费 {inMonth.filter(entry => entry.completed).length} 项 · 即将到期 {upcoming.filter(entry => !entry.completed).length} 项 · 逾期待处理 {pendingOverdue.length} 项</p>
     <div className="mb-2 flex flex-wrap gap-3 text-xs" aria-label="续费状态颜色说明">{["renewed", "upcoming", "due-soon", "overdue"].map(state => {const style=renewalStyles[state as keyof typeof renewalStyles];return <span key={state} className="inline-flex items-center gap-1"><span className={`size-2.5 rounded-full border ${style.color}`} aria-hidden="true"/>{style.label}</span>;})}</div>
     <div className="overflow-x-auto"><div className="grid min-w-[630px] grid-cols-7 gap-1" aria-label={`${month}续费日历`}>{weekdays.map(day => <div className="pb-0.5 text-xs font-medium" key={day}>{day}</div>)}{Array.from({length: leading}, (_, index) => <div key={"empty:" + index} aria-hidden="true" />)}{dates.map(dayCell)}</div></div>
-    {current && <section className="mt-5 rounded-lg border bg-card p-4" aria-label="续费账号详情"><div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold">{current.name} · {roleLabel(current)}</h2><p className="mt-2 break-all text-sm">{current.account || "账号未登记"}</p><p className="mt-1 text-sm text-muted-foreground">到期日：{current.date}{current.customerName ? " · 成员：" + current.customerName : ""}{current.completed ? " · 已续费，下一期：" + current.nextDueDate : ""}</p></div><Button variant="ghost" size="sm" onClick={() => setSelected(null)}>收起</Button></div>{!current.completed && <Button className="mt-3" size="sm" disabled={busy} onClick={() => void markRenewed(current)}>已续费</Button>}{current.sourceLegacySpaceId && classicSpaceIds.includes(current.sourceLegacySpaceId) && <Link className="mt-3 inline-block text-sm font-medium text-primary hover:underline" href={`/spaces/${current.sourceLegacySpaceId}`}>查看账号并续费 →</Link>}</section>}
+    {inMonth.some(entry => inMonth.filter(item => item.date === entry.date).length > 2) && <p className="mt-1.5 text-xs text-muted-foreground">同日多条事项可在日期内上下滚动，点击查看完整账号。</p>}
+    <Dialog open={Boolean(current)} onOpenChange={open => { if (!open) setSelected(null); }}>
+      <DialogContent aria-label="续费账号详情" className="sm:max-w-lg" onCloseAutoFocus={event => { event.preventDefault(); if (selectionTrigger.current?.isConnected) selectionTrigger.current.focus({ preventScroll: true }); }}>
+        {current && <>
+          <DialogHeader><DialogTitle className="pr-5">{current.name}</DialogTitle><DialogDescription>{roleLabel(current)}{current.planName ? " · " + current.planName : ""}</DialogDescription></DialogHeader>
+          <div><span className={`inline-flex rounded-md border px-2 py-1 text-xs ${renewalStyles[renewalCalendarStatus(current, today, soonDays)].color}`}>{renewalStyles[renewalCalendarStatus(current, today, soonDays)].label}</span></div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm">
+            <div className="col-span-2"><dt className="mb-1 text-xs text-muted-foreground">账号 / 成员</dt><dd className="break-all font-mono">{current.account || current.customerName || "账号未登记"}</dd></div>
+            {current.customerName && current.customerName !== current.account && <div className="col-span-2"><dt className="mb-1 text-xs text-muted-foreground">使用人</dt><dd className="break-words">{current.customerName}</dd></div>}
+            <div><dt className="mb-1 text-xs text-muted-foreground">本期到期日</dt><dd className="font-mono">{current.date}</dd></div>
+            <div><dt className="mb-1 text-xs text-muted-foreground">{current.completed ? "下期到期日" : "剩余 / 逾期"}</dt><dd className={current.completed ? "font-mono text-primary" : ""}>{current.completed ? current.nextDueDate : daysFrom(current.date, today) < 0 ? `逾期 ${-daysFrom(current.date, today)} 天` : daysFrom(current.date, today) === 0 ? "今天到期" : `${daysFrom(current.date, today)} 天后到期`}</dd></div>
+            <div className="col-span-2 border-t pt-3"><dt className="mb-1 text-xs text-muted-foreground">{current.kind === "subscription" ? "订阅费用" : "约定收费"}</dt><dd>{amount(current, true)}</dd></div>
+          </dl>
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {message && <p role="status" className="text-sm text-primary">{message}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelected(null)}>关闭</Button>
+            {current.sourceLegacySpaceId && classicSpaceIds.includes(current.sourceLegacySpaceId) && <Button asChild variant="outline"><Link href={`/spaces/${current.sourceLegacySpaceId}`}>打开订阅详情</Link></Button>}
+            {!current.completed && <Button disabled={busy} onClick={() => void markRenewed(current)}>{busy ? "处理中…" : "标记已续费"}</Button>}
+          </DialogFooter>
+        </>}
+      </DialogContent>
+    </Dialog>
     <section className="mt-4" aria-labelledby="upcoming-renewals"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold" id="upcoming-renewals">即将到期</h2><span className="text-xs text-muted-foreground">今天及未来 {soonDays} 天 · 含已续费记录</span></div>{table(upcoming, "即将到期")}</section>
     <section className="mt-4"><h2 className="mb-2 text-lg font-semibold">本月全部续费事项</h2>{table(inMonth, "本月全部续费")}</section>
     <details className="mt-4"><summary className="cursor-pointer text-base font-semibold">历史到期 · 待处理 {pendingOverdue.length} 项 · 已续费 {overdue.filter(entry => entry.completed).length} 项</summary><p className="my-3 text-sm text-muted-foreground">原日期的记录继续保留，已续费为绿色；尚未续费的逾期事项为红色。</p>{table(overdue, "已逾期")}</details>
