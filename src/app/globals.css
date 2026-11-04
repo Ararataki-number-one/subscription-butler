@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans), "Noto Sans SC", "Microsoft YaHei", sans-serif;
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans), "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --font-sans: var(--font-geist-sans, "Segoe UI"), "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  --font-mono: var(--font-geist-mono, ui-monospace), Consolas, monospace;
+  --font-heading: var(--font-geist-sans, "Segoe UI"), "Noto Sans SC", "Microsoft YaHei", sans-serif;
   --text-xs: 0.8125rem;
   --text-xs--line-height: 1.4;
   --color-sidebar-ring: var(--sidebar-ring);

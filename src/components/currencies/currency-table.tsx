@@ -1,6 +1,7 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use client";
 
+import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { CurrencyRow } from "@/db/currencies";
@@ -58,18 +59,8 @@ export function CurrencyTable({
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b bg-background/95 px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">币种</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-              新增币种随定时刷新尝试获取报价；缺少汇率时，请先刷新汇率再创建订阅。
-            </p>
-          </div>
-          <Button onClick={() => setDialog({ mode: "add" })}>
-            <Plus className="size-4" />
-            新增币种
-          </Button>
-        </div>
+        <WorkspacePageHeading title="币种" actions={<Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增币种</Button>} />
+        <p className="text-xs leading-5 text-muted-foreground">新增币种随定时刷新尝试获取报价；缺少汇率时，请先刷新汇率再创建订阅。</p>
 
         <div className="mt-4 max-w-sm">
           <Label htmlFor="currency-country-filter" className="mb-2">

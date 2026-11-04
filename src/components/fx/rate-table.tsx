@@ -1,6 +1,7 @@
 // Adapted for Subscription Butler (订阅管家); see NOTICE for upstream attribution.
 "use client";
 
+import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -110,12 +111,7 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b bg-background/95 px-4 py-4 sm:px-6 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">汇率</h1>
-
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <WorkspacePageHeading title="汇率" actions={<div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">基准币种</span>
           <Select value={base} onValueChange={onBaseChange}>
             <SelectTrigger className="w-36" aria-label="选择基准币种">
@@ -136,8 +132,7 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
             />
             刷新汇率
           </Button>
-        </div>
-      </div>
+        </div>} />
 
       {/* As-of label is always shown whenever a cache exists, stale or not (D-05). */}
       {asOf && (

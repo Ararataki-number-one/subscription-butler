@@ -71,7 +71,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {topLevel.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || (item.href === "/spaces" && pathname.startsWith("/spaces/"));
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -83,6 +83,7 @@ export function AppSidebar() {
                       <Link
                         href={item.href}
                         aria-label={item.label}
+                        aria-current={isActive ? "page" : undefined}
                         onClick={() => setOpenMobile(false)}
                       >
                         <Icon aria-hidden="true" />
@@ -113,6 +114,7 @@ export function AppSidebar() {
                           <Link
                             href={child.href}
                             aria-label={child.label}
+                            aria-current={isActive ? "page" : undefined}
                             onClick={() => setOpenMobile(false)}
                           >
                             <Icon aria-hidden="true" />

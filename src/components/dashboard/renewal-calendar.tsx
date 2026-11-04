@@ -11,6 +11,7 @@ import { filterRenewalCalendarEntries, overdueRenewalEntries, renewalCalendarEnt
 import { freezeUsdMinor, formatMinor } from "@/lib/money";
 import { paymentFee } from "@/lib/payment-fees";
 import { MoneyDisplay } from "@/components/money-display";
+import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
@@ -129,7 +130,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
     </div>;
   }
   return <div className="mx-auto w-full max-w-[1600px] px-4 py-4 sm:px-6 lg:px-8" data-renewal-calendar>
-    <header className="mb-3 flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold tracking-tight">续费日历</h1><p className="mt-1 text-sm text-muted-foreground">查看所有账号的到期事项与续费记录。</p></div><Button variant="outline" size="sm" disabled={busy} onClick={() => void refresh()}><RefreshCw className={busy ? "animate-spin" : ""} />刷新</Button></header>
+    <WorkspacePageHeading title="续费日历" actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void refresh()}><RefreshCw className={busy ? "animate-spin" : ""} />刷新</Button>} />
     {message && <p role="status" className="mb-3 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-700">{message}</p>}
     {error && <p className="mb-4 rounded-md border border-destructive/30 p-3 text-sm text-destructive" role="alert">{error}</p>}
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><Button variant="outline" size="icon" aria-label="上一月" onClick={() => changeMonth(-1)}><ChevronLeft /></Button><input className="rounded-md border bg-card px-3 py-2 text-sm" aria-label="日历月份" type="month" min="1900-01" max="2200-12" value={month} onChange={event => { if (calendarDays(event.target.value).length) setMonth(event.target.value); }}/><Button variant="outline" size="icon" aria-label="下一月" onClick={() => changeMonth(1)}><ChevronRight /></Button><Button variant="ghost" size="sm" onClick={() => setMonth(today.slice(0, 7))}>本月</Button></div><input className="w-full rounded-md border bg-card px-3 py-2 text-sm sm:w-80" type="search" aria-label="搜索续费账号" placeholder="搜索账号邮箱、成员或订阅名称" value={search} onChange={event => setSearch(event.target.value)}/></div>

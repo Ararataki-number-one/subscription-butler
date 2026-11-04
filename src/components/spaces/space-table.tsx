@@ -27,6 +27,7 @@ import type { TeamEarnings } from "@/db/teamEarnings";
 import { TeamEarningsSummary } from "./team-earnings-card";
 import { MoneyDisplay } from "@/components/money-display";
 import type { CnyDisplayRate } from "@/lib/money-display";
+import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -319,16 +320,8 @@ export function SpaceTable({
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 px-4 py-4 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">空间与账号</h1>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            查看订阅成本、续费日期与出租收益。
-          </p>
-        </div>
-        <Button onClick={() => setFormState({ mode: "add" })}><Plus className="size-4" /><span className="hidden sm:inline">新增空间 / 账号</span><span className="sm:hidden">新增</span></Button>
-      </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
+      <WorkspacePageHeading title="空间与账号" actions={<Button onClick={() => setFormState({ mode: "add" })}><Plus className="size-4" />新增空间 / 账号</Button>} />
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
           <div className="col-span-2 lg:col-span-1">
             <Label htmlFor="space-email-filter" className="sr-only">
               账号 / 母号 / 子号邮箱

@@ -44,7 +44,7 @@ export function AutomaticFxRefresh() {
   const time = status?.fetchedAt
     ? new Date(status.fetchedAt).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })
     : null;
-  return <span className="ml-auto text-[11px] text-muted-foreground" role="status">
+  return <span className="ml-auto shrink-0 text-xs text-muted-foreground" role="status">
     汇率每 5 分钟更新{status?.failed ? " · 更新失败，保留上次数据" : time ? " · 最近检查 " + time : ""}
   </span>;
 }

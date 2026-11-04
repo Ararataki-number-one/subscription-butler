@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -95,13 +96,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-4 sm:px-6 lg:px-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">支付渠道</h1>
-          <p className="mt-1 text-sm leading-6 text-muted-foreground">管理支付方式、手续费和加密卡片资料。</p>
-        </div>
-        <Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增渠道</Button>
-      </header>
+      <WorkspacePageHeading title="支付渠道" actions={<Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增渠道</Button>} />
 
       <dl className="grid grid-cols-2 rounded-lg border bg-card xl:grid-cols-4 xl:[&>div+div]:border-l">
         {[
