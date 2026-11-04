@@ -100,6 +100,8 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
     <div className="mx-auto w-full max-w-[1440px] space-y-4 px-4 py-4 sm:px-6 lg:px-8">
       <WorkspacePageHeading title="支付渠道" actions={<Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增渠道</Button>} />
 
+      <section data-channel-overview aria-label="全部渠道概况">
+      <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><span className="font-medium">全部渠道概况</span><span>不随筛选变化</span></div>
       <dl className="grid grid-cols-2 rounded-lg border bg-card xl:grid-cols-4 xl:[&>div+div]:border-l">
         {[
           { label: "可用渠道", value: activeCount, hint: (channels.length - activeCount) + " 个已归档" },
@@ -107,12 +109,13 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
           { label: "关联订阅", value: subscriptionCount, hint: "包含 Business 与独立账号" },
           { label: "需要关注的订阅", value: attentionCount, hint: "已逾期或 " + soonDays + " 天内到期" },
         ].map(item => (
-          <div key={item.label} className="px-4 py-3">
+          <div key={item.label} className="flex items-center justify-between gap-3 px-4 py-2" title={item.hint}>
             <dt className="text-xs text-muted-foreground">{item.label}</dt>
-            <dd className="mt-1 font-mono text-2xl font-semibold tabular-nums">{item.value}</dd>
+            <dd className="font-mono text-xl font-semibold tabular-nums">{item.value}</dd>
           </div>
         ))}
       </dl>
+      </section>
 
       <section aria-label="渠道筛选" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -154,9 +157,16 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
         </div>
       </section>
 
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <p>显示 {visible.length} 个渠道 · 常用优先</p>
-        <p>成本为关联订阅当前周期的合计</p>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <p data-channel-scope role="status" aria-live="polite">当前筛选 <strong className="font-mono text-foreground">{visible.length}</strong> 个 / 全部 {channels.length} 个渠道 · 常用优先</p>
+        {hasFilters && <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label="当前渠道筛选条件">
+          {query.trim() && <Badge variant="secondary" className="max-w-60"><span className="truncate" title={query}>搜索：{query}</span></Badge>}
+          {status !== "active" && <Badge variant="secondary">{status === "all" ? "全部状态" : "已归档"}</Badge>}
+          {type !== "all" && <Badge variant="secondary">{channelTypeLabel(type)}</Badge>}
+          {useFilter !== "all" && <Badge variant="secondary">{USAGE_LABELS[useFilter]}</Badge>}
+          {favoritesOnly && <Badge variant="secondary">只看常用</Badge>}
+        </div>}
+        <p>关联订阅 · 当前周期成本</p>
       </div>
       {visible.length ? (
         <div className="channel-table overflow-x-auto rounded-lg border bg-card">

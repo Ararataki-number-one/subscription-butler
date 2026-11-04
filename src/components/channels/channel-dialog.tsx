@@ -55,15 +55,15 @@ export function ChannelDialog({ open, mode, channel, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={value => { if (!pending) onOpenChange(value); }}>
-      <DialogContent className="sm:max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-4xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{mode === "add" ? "新增支付渠道" : "编辑支付渠道"}</DialogTitle>
-          <DialogDescription className="sr-only">维护渠道的辨认信息与手续费。</DialogDescription>
+          <DialogDescription className="truncate text-xs" title={channel?.name}>{mode === "edit" ? channel?.name : "记录辨认信息与支付手续费"}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(save)} className="space-y-5">
-            <fieldset disabled={pending} className="grid gap-4 md:grid-cols-2">
-              <section aria-label="渠道资料" className="space-y-3"><h3 className="text-sm font-semibold">渠道资料</h3><div className="grid gap-3 sm:grid-cols-2">
+          <form onSubmit={form.handleSubmit(save)} className="flex min-h-0 flex-col gap-4 overflow-hidden">
+            <div className="min-h-0 overflow-y-auto overscroll-contain pr-1"><fieldset disabled={pending} className="grid min-w-0 gap-4 md:grid-cols-2">
+              <section aria-label="渠道资料" className="min-w-0 space-y-3"><h3 className="text-sm font-semibold">渠道资料</h3><div className="grid gap-3 sm:grid-cols-2">
                 <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem><FormLabel>渠道名称</FormLabel>
                   <FormControl><Input autoFocus maxLength={80} placeholder="例如：roogoo 主力卡" {...field} /></FormControl>
@@ -92,7 +92,7 @@ export function ChannelDialog({ open, mode, channel, onOpenChange }: Props) {
                 </FormItem>
               )} />
               </div><p className="text-xs leading-5 text-muted-foreground">这里只记录尾号或标记。完整卡号、CVC 等资料在列表的“卡片资料”中加密管理。</p></section>
-              <section aria-label="手续费与使用" className="space-y-3"><h3 className="text-sm font-semibold">手续费与使用</h3>
+              <section aria-label="手续费与使用" className="min-w-0 space-y-3"><h3 className="text-sm font-semibold">手续费与使用</h3>
                 <FormField control={form.control} name="feePercent" render={({ field }) => (
                 <FormItem><FormLabel>手续费（%）</FormLabel>
                   <FormControl><Input {...field} value={field.value ?? "0"} inputMode="decimal" placeholder="例如：2.5" /></FormControl>
@@ -101,10 +101,10 @@ export function ChannelDialog({ open, mode, channel, onOpenChange }: Props) {
                 </FormItem>
               )} />
                 <FormField control={form.control} name="isFavorite" render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4 border-t pt-3">
-                  <div><FormLabel>设为常用渠道</FormLabel>
+                <FormItem className="flex min-w-0 items-center justify-between gap-4 border-t pt-3">
+                  <div className="min-w-0"><FormLabel>设为常用渠道</FormLabel>
                     <p className="mt-1 text-xs text-muted-foreground">在渠道列表和订阅选择框中优先显示。</p></div>
-                  <FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={pending} /></FormControl>
+                  <span className="relative inline-flex shrink-0 px-3"><FormControl><Switch checked={field.value ?? false} onCheckedChange={field.onChange} disabled={pending} /></FormControl></span>
                 </FormItem>
               )} />
               </section>
@@ -116,9 +116,9 @@ export function ChannelDialog({ open, mode, channel, onOpenChange }: Props) {
                   <FormMessage />
                 </FormItem>
               )} />
-            </fieldset>
+            </fieldset></div>
             {form.formState.errors.root && <p role="alert" className="text-sm text-destructive">{form.formState.errors.root.message}</p>}
-            <DialogFooter className="sticky bottom-0 bg-popover">
+            <DialogFooter className="shrink-0 border-t bg-popover pt-4">
               <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>取消</Button>
               <Button type="submit" disabled={pending}>{pending ? "保存中…" : "保存渠道"}</Button>
             </DialogFooter>

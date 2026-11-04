@@ -3,7 +3,7 @@
 
 import { WorkspacePageHeading } from "@/components/layout/workspace-header";
 import { useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Search, X } from "lucide-react";
 import type { CurrencyRow } from "@/db/currencies";
 import type { CurrencyMeta } from "@/lib/currencies";
 import { Button } from "@/components/ui/button";
@@ -60,22 +60,21 @@ export function CurrencyTable({
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 border-b bg-background/95 px-4 py-4 sm:px-6 lg:px-8">
         <WorkspacePageHeading title="币种" actions={<Button onClick={() => setDialog({ mode: "add" })}><Plus className="size-4" />新增币种</Button>} />
-        <p className="text-xs leading-5 text-muted-foreground">新增币种随定时刷新尝试获取报价；缺少汇率时，请先刷新汇率再创建订阅。</p>
-
-        <div className="mt-4 max-w-sm">
-          <Label htmlFor="currency-country-filter" className="mb-2">
-            搜索币种
-          </Label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3"><div className="relative w-full max-w-sm">
+          <Label htmlFor="currency-country-filter" className="sr-only">搜索币种</Label>
+          <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" aria-hidden="true" />
           <Input
             id="currency-country-filter"
+            className="pl-9 pr-10"
             value={countryQuery}
             onChange={(event) => setCountryQuery(event.target.value)}
             placeholder="国家、币种名称或代码"
           />
+          {countryQuery && <Button variant="ghost" size="icon-sm" className="absolute right-1 top-0.5" aria-label="清除币种搜索" onClick={() => setCountryQuery("")}><X /></Button>}
+        </div><span data-currency-count role="status" aria-live="polite" className="shrink-0 text-xs text-muted-foreground">{normalizedCountryQuery ? "匹配" : "共"} <strong className="font-mono text-foreground">{filteredCurrencies.length}</strong>{normalizedCountryQuery ? ` / 全部 ${currencies.length} 个` : " 个币种"}</span></div>
+        <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">金额精度与报价</summary><div className="mt-2 max-w-md space-y-1 leading-5"><p>小数位数决定金额精度，例如人民币为 2 位。</p><p>新增币种随定时刷新获取报价；缺少汇率时，请先刷新汇率再创建订阅。</p></div></details>
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          小数位数决定金额可填写的精度，例如人民币为 2 位。
-        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
@@ -106,11 +105,11 @@ export function CurrencyTable({
           {filteredCurrencies.map((row) => (
             <TableRow key={row.code}>
               <TableCell>{row.countryName}</TableCell>
-              <TableCell className="font-mono">{row.code}</TableCell>
-              <TableCell className="font-mono">{row.symbol}</TableCell>
+              <TableCell className="font-mono font-medium">{row.code}</TableCell>
+              <TableCell className="font-mono text-muted-foreground">{row.symbol}</TableCell>
               <TableCell>{row.name}</TableCell>
               <TableCell className="text-right font-mono">
-                {row.minorUnit}
+                {row.minorUnit} <span className="text-xs text-muted-foreground">位</span>
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
@@ -152,7 +151,7 @@ export function CurrencyTable({
                 colSpan={6}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
-                没有匹配的国家/地区
+                没有匹配的币种。可清除搜索查看全部国家、名称与代码。
               </TableCell>
             </TableRow>
           ) : null}

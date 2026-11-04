@@ -11,9 +11,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  Info,
   Pencil,
   Plus,
+  Search,
   Trash2,
+  X,
 } from "lucide-react";
 import type { ChannelRow } from "@/db/channels";
 import type { CurrencyRow } from "@/db/currencies";
@@ -183,19 +186,13 @@ function SortableHead({
       : ArrowDown
     : ArrowUpDown;
   return (
-    <TableHead scope="col" className={`text-left ${className ?? ""}`}>
+    <TableHead scope="col" aria-sort={active ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className={`text-left ${className ?? ""}`}>
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className="-ml-1.5 h-8 px-1.5 font-medium"
-        aria-sort={
-          active
-            ? sort.direction === "asc"
-              ? "ascending"
-              : "descending"
-            : "none"
-        }
+        className={`-ml-1.5 h-8 px-1.5 font-medium ${active ? "bg-primary/10 text-primary hover:bg-primary/15" : "text-muted-foreground"}`}
+        aria-label={`按${label}${active && sort.direction === "asc" ? "降序" : "升序"}排列`}
         onClick={() => onSort(sortKey)}
       >
         {label}
@@ -317,17 +314,25 @@ export function SpaceTable({
     );
   }
 
+  function clearFilters() {
+    setEmailQuery("");
+    setPage(1);
+    router.push("/spaces");
+  }
+
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 px-4 py-4 sm:px-6 lg:px-8">
       <WorkspacePageHeading title="空间与账号" actions={<Button onClick={() => setFormState({ mode: "add" })}><Plus className="size-4" />新增空间 / 账号</Button>} />
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
-          <div className="col-span-2 lg:col-span-1">
+          <div className="relative col-span-2 lg:col-span-1">
             <Label htmlFor="space-email-filter" className="sr-only">
               账号 / 母号 / 子号邮箱
             </Label>
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="space-email-filter"
+              className="pl-9 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
               type="search"
               value={emailQuery}
               onChange={(event) => {
@@ -337,6 +342,7 @@ export function SpaceTable({
               placeholder="账号 / 母号 / 子号邮箱"
               autoComplete="off"
             />
+            {hasEmailQuery && <Button type="button" variant="ghost" size="icon-sm" className="absolute right-1 top-1" aria-label="清空邮箱搜索" onClick={() => { setEmailQuery(""); setPage(1); document.getElementById("space-email-filter")?.focus(); }}><X aria-hidden="true" className="size-3.5" /></Button>}
           </div>
           <Select value={selectedPlan ?? "all"} onValueChange={value => {
             setPage(1);
@@ -378,17 +384,25 @@ export function SpaceTable({
             </SelectContent>
           </Select>
         </div>
+      {hasFilters && <div data-space-filter-context className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+        <span role="status" aria-live="polite" className="mr-1 font-medium tabular-nums">找到 {emailFilteredSpaces.length} 个订阅</span>
+        {selectedPlan && <Button variant="secondary" size="sm" className="h-7 max-w-52 gap-1.5 px-2 text-xs" aria-label="移除订阅类型筛选" onClick={() => { setPage(1); router.push(buildHref(selectedCountry, selectedChannel)); }}><span className="truncate">{SPACE_PLAN_OPTIONS.find(option => option.value === selectedPlan)?.label ?? selectedPlan}</span><X aria-hidden="true" className="size-3" /></Button>}
+        {selectedCountry && <Button variant="secondary" size="sm" className="h-7 gap-1.5 px-2 text-xs" aria-label="移除国家筛选" onClick={() => setCountry("all")}>{formatCountryLabel(selectedCountry)}<X aria-hidden="true" className="size-3" /></Button>}
+        {selectedChannel && <Button variant="secondary" size="sm" className="h-7 max-w-64 gap-1.5 px-2 text-xs" aria-label="移除支付渠道筛选" title={channels.find(channel => channel.id === selectedChannel)?.name} onClick={() => setChannel("all")}><span className="truncate">{channels.find(channel => channel.id === selectedChannel)?.name ?? "所选渠道"}</span><X aria-hidden="true" className="size-3" /></Button>}
+        {hasEmailQuery && <span className="max-w-64 truncate text-muted-foreground" title={emailQuery}>邮箱包含“{emailQuery.trim()}”</span>}
+        <Button variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs text-muted-foreground" onClick={clearFilters}>清除筛选</Button>
+      </div>}
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {totalsByPlan.map(group => <div key={group.label} className="min-w-0 rounded-lg border bg-card px-3 py-2">
-          <div className="flex justify-between text-sm font-semibold"><span>{group.label}</span><span className="text-xs font-normal text-muted-foreground">{group.count} 个订阅</span></div>
-          <div className="mt-1 grid grid-cols-3 gap-3 text-xs">
-            <div className="min-w-0 text-muted-foreground">约定收入 / 月<p className="mt-0.5 text-sm text-foreground"><MoneyDisplay value={group.income} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
-            <div className="min-w-0 text-muted-foreground">成本 / 月<p className="mt-0.5 text-sm text-foreground"><MoneyDisplay value={group.cost} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
-            <div className="min-w-0 text-muted-foreground">预计净收益 / 月<p className={`mt-0.5 text-sm ${group.net !== null && group.net < 0 ? "text-destructive" : "text-foreground"}`}><MoneyDisplay value={group.net} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
-          </div>
+        {totalsByPlan.map(group => <div key={group.label} data-space-summary={group.label} className="min-w-0 rounded-lg border bg-card px-3 py-2">
+          <div className="flex justify-between text-sm font-semibold"><span>{group.label} <span className="ml-1 text-xs font-normal text-muted-foreground">月度估算</span></span><span className="text-xs font-normal tabular-nums text-muted-foreground">{group.count} 个订阅</span></div>
+          <dl className="mt-1 grid grid-cols-3 gap-3 text-xs">
+            <div className="min-w-0"><dt className="text-muted-foreground">约定收入</dt><dd className="mt-0.5 text-sm"><MoneyDisplay value={group.income} cnyRate={cnyRate} className="gap-0 font-medium" /></dd></div>
+            <div className="min-w-0"><dt className="text-muted-foreground">成本</dt><dd className="mt-0.5 text-sm"><MoneyDisplay value={group.cost} cnyRate={cnyRate} className="gap-0 font-medium" /></dd></div>
+            <div className="min-w-0 border-l pl-3"><dt className="text-muted-foreground">预计净收益</dt><dd className={`mt-0.5 text-sm ${group.net === null ? "text-muted-foreground" : group.net < 0 ? "text-destructive" : "text-primary"}`}><MoneyDisplay value={group.net} cnyRate={cnyRate} className="gap-0 font-semibold [&>span:first-child]:text-base" /></dd></div>
+          </dl>
         </div>)}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Business / Pro 按当前筛选汇总 · 人民币 / 美元</p>
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><span>Business / Pro 按当前筛选汇总 · 人民币 / 美元</span><Tooltip><TooltipTrigger asChild><button type="button" className="inline-flex items-center gap-1 rounded-sm outline-none underline decoration-dotted underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40" aria-label="查看月度估算口径"><Info aria-hidden="true" className="size-3.5" />汇总口径</button></TooltipTrigger><TooltipContent className="max-w-sm">按筛选内 Business / Pro 的约定收费与成本按月折算；预计净收益不代表已收款。</TooltipContent></Tooltip></div>
       </div>
 
       {emailFilteredSpaces.length === 0 ? (
@@ -396,7 +410,7 @@ export function SpaceTable({
           {hasFilters ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 py-12 text-center">
             <h2 className="text-lg font-semibold">没有符合条件的空间</h2>
-            <Button variant="outline" size="sm" onClick={() => { setEmailQuery(""); setPage(1); router.push("/spaces"); }}>清除筛选</Button>
+            <Button variant="outline" size="sm" onClick={clearFilters}>清除筛选</Button>
           </div>
           ) : (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 py-12 text-center">
@@ -416,6 +430,7 @@ export function SpaceTable({
         <div className="mx-4 mb-3 min-h-0 flex-1 overflow-auto rounded-lg border bg-card sm:mx-6 lg:mx-8">
             <table
               data-slot="table"
+              aria-label="订阅与账号列表"
               className="w-full min-w-[1040px] table-fixed caption-bottom text-sm"
             >
           <colgroup>
@@ -471,7 +486,7 @@ export function SpaceTable({
               const { space, motherAccount, paymentChannel, currency } = row;
               const nativeMatchesUsd = currency.code === "USD" && space.amountUsd === space.amountMinor + space.feeAmountMinor;
               return (
-                <TableRow key={space.id} className="group">
+                <TableRow key={space.id} data-space-id={space.id} className="group focus-within:bg-accent/40">
                   <TableCell className="whitespace-normal">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -522,8 +537,8 @@ export function SpaceTable({
                     {teamEarnings[space.id] ? <TeamEarningsSummary earnings={teamEarnings[space.id]} cnyRate={cnyRate} />
                       : <span className="text-xs text-muted-foreground">独立账号</span>}
                   </TableCell>
-                  <TableCell className="sticky right-0 border-l bg-card text-center group-hover:bg-muted">
-                    <div className="flex justify-center gap-1">
+                  <TableCell className="sticky right-0 border-l bg-card text-center group-hover:bg-muted group-focus-within:bg-accent">
+                    <div role="group" aria-label={`${space.name}的操作`} className="flex justify-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -564,7 +579,7 @@ export function SpaceTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-8"
+                            className="size-8 hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
                             aria-label={`删除 ${space.name}`}
                             onClick={() => setDeleteTarget(row)}
                           >
@@ -582,10 +597,11 @@ export function SpaceTable({
             </table>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t bg-card px-4 py-3 sm:px-6 lg:px-8">
-            <p className="text-sm text-muted-foreground">
-              显示 {rangeStart}-{rangeEnd} 条，共 {sortedSpaces.length} 条
-            </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <p role="status" aria-live="polite">显示 {rangeStart}-{rangeEnd} 条，共 {sortedSpaces.length} 条</p>
+              <span data-space-sort-summary className="text-xs">{{ name: "订阅名称", country: "国家/地区", channel: "支付渠道", amount: "订阅成本", expiry: "到期日" }[sort.key]} · {sort.direction === "asc" ? "升序" : "降序"}</span>
+            </div>
+            <div role="navigation" aria-label="订阅列表分页" className="flex items-center gap-2">
               <Select value={String(pageSize)} onValueChange={value => { setPageSize(Number(value)); setPage(1); }}>
                 <SelectTrigger className="h-8 w-28" aria-label="每页条数"><SelectValue>{pageSize} 条 / 页</SelectValue></SelectTrigger>
                 <SelectContent>{[10, 20, 50].map(size => <SelectItem key={size} value={String(size)}>{size} 条 / 页</SelectItem>)}</SelectContent>

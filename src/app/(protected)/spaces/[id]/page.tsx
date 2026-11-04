@@ -133,17 +133,21 @@ export default async function SpaceDetailPage({
 
   return (
     <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-      <div className="sticky top-14 z-20 flex flex-wrap items-center gap-3 rounded-lg border bg-card/95 p-3 backdrop-blur-lg">
+      <div data-space-identity className="sticky top-14 z-20 flex flex-wrap items-center gap-3 rounded-lg border bg-card/95 px-3 py-2.5 backdrop-blur-lg">
         <Button asChild variant="ghost" className="h-8 gap-2 px-2">
           <Link href="/spaces" aria-label="返回列表">
             <ArrowLeft aria-hidden="true" className="size-4" />
             <span className="hidden sm:inline">返回列表</span>
           </Link>
         </Button>
-        <h1 className="min-w-0 flex-1 break-words text-xl font-semibold tracking-tight sm:text-2xl">
-          {space.name}
-        </h1>
-        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h1 className="min-w-0 break-words text-xl font-semibold tracking-tight">{space.name}</h1>
+            <span className="rounded border bg-muted/40 px-1.5 py-0.5 text-xs text-muted-foreground">{spacePlanLabel(space.planType, space.customPlanName)}</span>
+          </div>
+          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={motherAccount.email}>{motherAccount.email}</p>
+        </div>
+        <div data-space-actions className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto sm:border-l sm:pl-3">
           <SpaceDetailActions
             space={formValue}
             expiryDate={space.expiryDate}
@@ -189,8 +193,9 @@ export default async function SpaceDetailPage({
 {independent && <DetailItem label="联系方式"><span>{space.contact || "—"}</span></DetailItem>}
 {isProPlan(space.planType) && <DetailItem label="Pro 使用方式"><span>拼车</span></DetailItem>}
               </div></section>
-              <section aria-label="支付与成本"><h3 className="text-sm font-semibold">支付与成本</h3><div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
-<DetailItem label="支付渠道">
+              <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]">
+              <section aria-label="支付与成本" className="min-w-0 rounded-md border bg-muted/15 px-3 pb-2 pt-3"><h3 className="text-sm font-semibold">支付与成本</h3><div className="grid gap-x-4 md:grid-cols-2">
+<DetailItem label="支付渠道" className="md:col-span-2">
                 <span>{paymentChannel.name}</span>
               </DetailItem>
 <DetailItem label="订阅成本（原币）">
@@ -201,14 +206,14 @@ export default async function SpaceDetailPage({
 <DetailItem label="支付手续费">
                 <span className="font-mono">{space.feePercent}% · {formatCurrencyMinor(space.feeAmountMinor, currency)}</span>
               </DetailItem>
-<DetailItem label="含手续费合计">
-                <span className="font-mono">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}</span>
+<DetailItem label="含手续费合计" className="border-b-0">
+                <span className="font-mono font-semibold">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}</span>
               </DetailItem>
-<DetailItem label="记账金额" action={<FrozenAmountHelp className="-my-1" />}>
+<DetailItem label="记账金额" className="border-b-0" action={<FrozenAmountHelp className="-my-1" />}>
                 <MoneyDisplay compact value={space.amountUsd} cnyRate={cnyDisplayRate} />
               </DetailItem>
               </div></section>
-              <section aria-label="周期与续费"><h3 className="text-sm font-semibold">周期与续费</h3><div className="grid gap-x-6 md:grid-cols-2 xl:grid-cols-3">
+              <section aria-label="周期与续费" className="min-w-0 rounded-md border px-3 pb-2 pt-3"><h3 className="text-sm font-semibold">周期与续费</h3><div className="grid gap-x-4 md:grid-cols-2">
 <DetailItem label="首次开通日">
                 <span className="font-mono">{space.openingDate ?? "-"}</span>
               </DetailItem>
@@ -221,9 +226,10 @@ export default async function SpaceDetailPage({
                 <span>{formatPeriodLabel(space.periodUnit, space.periodCount)}</span>
               </DetailItem>
 <DetailItem label="到期日">
-                <span className="font-mono">{space.expiryDate ?? "-"}</span>
+                <span className="font-mono font-semibold">{space.expiryDate ?? "-"}</span>
               </DetailItem>
               </div></section>
+              </div>
             </div>
           )}
 
@@ -238,12 +244,12 @@ export default async function SpaceDetailPage({
                 <MoneyDisplay compact value={space.amountUsd} cnyRate={cnyDisplayRate} />
               </DetailItem>
           </div>}
-          <details className="text-xs text-muted-foreground">
+          <details aria-label="汇率更新详情" className="text-xs text-muted-foreground">
             <summary className="w-fit cursor-pointer py-1">汇率更新信息</summary>
-            <p className="mt-1 leading-5">
-                  每 5 分钟更新汇率，重算当前成本和预计收益。
-                  报价日期 {currentRate?.quoteDate ?? "—"} · 最近检查 {formatAsOf(currentRate?.fetchedAt ?? null)}
-            </p>
+            <div className="mt-2 space-y-2 rounded-md bg-muted/40 p-3 leading-5">
+              <p>每 5 分钟更新汇率，重算当前成本和预计收益。</p>
+              <dl className="flex flex-wrap gap-x-8 gap-y-1"><div className="flex gap-2"><dt>报价日期</dt><dd className="font-mono text-foreground">{currentRate?.quoteDate ?? "—"}</dd></div><div className="flex gap-2"><dt>最近检查</dt><dd className="font-mono text-foreground">{formatAsOf(currentRate?.fetchedAt ?? null)}</dd></div></dl>
+            </div>
           </details>
         </CardContent>
       </Card>

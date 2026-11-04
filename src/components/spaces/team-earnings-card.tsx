@@ -28,7 +28,7 @@ export function TeamEarningsSummary({ earnings, cnyRate = null }: { earnings: Te
               earnings.monthlyNetUsd === null ? "text-muted-foreground" : earnings.monthlyNetUsd < 0 ? "text-destructive" : "text-primary")}>
               <MoneyDisplay value={earnings.monthlyNetUsd} cnyRate={cnyRate} compact className="gap-x-1.5 gap-y-0" />
             </span>
-            {earnings.unmarkedCount > 0 && <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-label="含待标记账号，收益为已知收入估算" />}
+            {earnings.unmarkedCount > 0 && <span className="inline-flex shrink-0 items-center gap-1 text-xs text-amber-800 dark:text-amber-200" aria-label="含待标记账号，收益为已知收入估算"><CircleAlert aria-hidden="true" className="size-3.5" />待标记</span>}
           </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {roles.map(role => {

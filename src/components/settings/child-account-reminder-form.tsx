@@ -183,14 +183,15 @@ export function ChildAccountReminderForm({
   }
 
   return (
-    <Card id="child-email-settings" className={draft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
+    <Card id="child-email-settings" className={draft.enabled ? "scroll-mt-32 lg:col-span-2" : "scroll-mt-32"}>
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>子账号邮件提醒</CardTitle><span role="status" data-status-tone={isPending ? "info" : dirty ? "draft" : "neutral"} className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${statusTone(isPending ? "info" : dirty ? "draft" : "neutral")}`}>{isPending ? "处理中…" : dirty ? "待保存" : savedDraft.enabled ? "已开启" : "已关闭"}</span></div>
         <CardDescription>
           非自用子账号在下一付款日当天按指定时间发送一次，接收邮箱必填。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className={draft.enabled ? "flex max-h-[calc(100dvh-18rem)] min-h-0 flex-col gap-4" : "space-y-5"}>
+        <div className={draft.enabled ? "min-h-0 space-y-5 overflow-y-auto overscroll-contain py-2 pr-1" : "space-y-5"}>
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <Label htmlFor="childAccountEmailReminderEnabled">
@@ -198,12 +199,12 @@ export function ChildAccountReminderForm({
             </Label>
 
           </div>
-          <Switch
+          <span className="relative inline-flex shrink-0 px-3"><Switch
             id="childAccountEmailReminderEnabled"
             checked={draft.enabled}
             onCheckedChange={(checked) => updateDraft("enabled", checked)}
             disabled={isPending}
-          />
+          /></span>
         </div>
 
         {draft.enabled ? (
@@ -441,12 +442,13 @@ export function ChildAccountReminderForm({
           </>
         ) : null}
 
+        </div>
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
 
-        <div className="flex flex-wrap gap-2">
+        <div data-settings-savebar className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-card pt-3">{dirty && <span className="mr-auto text-xs text-muted-foreground">子账号邮件修改尚未保存</span>}
           <Button type="button" onClick={onSaveSettings} disabled={isPending}>
             <Save className="size-4" />
-            保存设置
+            保存子账号邮件
           </Button>
           {draft.enabled ? (
             <Button

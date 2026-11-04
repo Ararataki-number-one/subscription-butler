@@ -143,9 +143,9 @@ export function SpaceDetailActions({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            variant="destructive"
+            variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
             aria-label={`删除 ${space.name}`}
             onClick={() => setDeleteOpen(true)}
           >

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { statusTone } from "@/components/ui/status-tone";
 
 const FIELDS: { key: keyof CardDetails; label: string; placeholder?: string; mode?: "numeric"; wide?: boolean }[] = [
   { key: "cardNumber", label: "完整卡号", placeholder: "支持空格分组", mode: "numeric", wide: true },
@@ -85,15 +86,21 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
         <DialogDescription>本机加密保存，可随加密备份恢复。</DialogDescription>
       </DialogHeader>
       <div className="flex shrink-0 items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><LockKeyhole className="size-3.5" />{revision ? "已加密保存" : "尚未保存卡片资料"}{dirty ? " · 有未保存修改" : ""}</span>
+        <span className="flex flex-wrap items-center gap-2"><LockKeyhole className="size-3.5" />{revision ? "已加密保存" : "尚未保存卡片资料"}{dirty && <span role="status" className={`rounded border px-1.5 py-0.5 ${statusTone("draft")}`}>待加密保存</span>}</span>
         <Button type="button" size="sm" variant="outline" disabled={loading || pending} onClick={() => setRevealed(value => !value)}>
           {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}{revealed ? "隐藏资料" : "显示资料"}
         </Button>
       </div>
       <form className="flex min-h-0 flex-col" autoComplete="off" onSubmit={event => { event.preventDefault(); void save(); }}>
         <div className="min-h-0 overflow-y-auto pr-1">
-        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="grid gap-x-4 gap-y-3 sm:grid-cols-2 md:grid-cols-3">
-          {FIELDS.map(field => <div key={field.key} className={field.wide ? "sm:col-span-2 md:col-span-3" : ""}>
+        <fieldset disabled={loading || pending || !!error && !window.teamAccountManagerDesktop?.cardVault} className="space-y-4">
+          {[
+            { id: "identity", label: "卡片验证资料", fields: ["cardNumber", "expiryMonth", "expiryYear", "cvc", "cardholder"] },
+            { id: "billing", label: "账单资料与备注", fields: ["country", "postalCode", "billingAddress", "note"] },
+          ].map(group => <section key={group.id} data-card-field-group aria-labelledby={`card-group-${group.id}`} className="space-y-3 border-t pt-3 first:border-0 first:pt-0">
+          <h3 id={`card-group-${group.id}`} className="text-sm font-semibold">{group.label}</h3>
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-6">
+          {FIELDS.filter(field => group.fields.includes(field.key)).map(field => <div key={field.key} className={field.wide || field.key === "cardholder" ? "sm:col-span-6" : ["expiryMonth", "expiryYear", "cvc"].includes(field.key) ? "sm:col-span-2" : "sm:col-span-3"}>
             <label htmlFor={`card-${field.key}`} className="mb-1.5 block text-sm font-medium">{field.label}</label>
             <div className="flex gap-1.5">
               <Input id={`card-${field.key}`} name={field.key} type={revealed ? "text" : "password"} autoComplete="off" spellCheck={false}
@@ -104,6 +111,7 @@ export function CardDetailsDialog({ channel, onClose, onChanged }: {
                 disabled={!revision || dirty || !details[field.key]} onClick={() => void copy(field.key)}><Copy className="size-4" /></Button>
             </div>
           </div>)}
+          </div></section>)}
         </fieldset>
         <p className="mt-3 text-xs text-muted-foreground">离开窗口或显示 30 秒后，资料会自动隐藏。</p>
         {error && <p role="alert" className="mt-3 break-words text-sm text-destructive">{error}</p>}

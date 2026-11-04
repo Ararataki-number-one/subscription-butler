@@ -151,12 +151,12 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
       } catch { toast.error("操作失败，请重试。"); }
     });
   }
-  function metrics(seat: TeamEarningSeat) {
+  function metrics(seat: TeamEarningSeat, stacked = false) {
     return <dl className="grid gap-2 rounded-md bg-muted/25 p-2.5 sm:grid-cols-3">
       {[{ label: "收入 / 月", value: seat.monthlyIncomeUsd }, { label: "分摊成本 / 月", value: seat.monthlyCostUsd },
         { label: "预计净收益 / 月", value: seat.monthlyNetUsd }].map(item =>
         <div key={item.label} className="flex min-w-0 items-baseline justify-between gap-3 sm:block"><dt className="text-[13px] text-muted-foreground">{item.label}</dt>
-          <dd className={cn("min-w-0 text-right text-sm sm:mt-1 sm:text-left", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className="justify-end sm:justify-start [&_.text-xs]:text-[13px]" value={item.value} cnyRate={cnyRate} /></dd></div>)}
+          <dd className={cn("min-w-0 text-right text-sm sm:mt-1 sm:text-left", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className={cn("justify-end sm:justify-start [&_.text-xs]:text-[13px]", stacked && "flex-col items-start gap-y-0")} value={item.value} cnyRate={cnyRate} /></dd></div>)}
     </dl>;
   }
   const motherCurrency = currencies.find(c => c.code === mother.expectedCurrencyCode);
@@ -181,56 +181,64 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
         {earnings.unmarkedCount > 0 && <p className="text-sm text-amber-700 dark:text-amber-300">有位置尚未标记用途，当前收益仅包含已知约定收入。</p>}
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <dl aria-label="每月经营汇总" className="grid divide-y rounded-md border bg-muted/20 px-3 py-2 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[{ label: "总约定收入 / 月", value: earnings.monthlyIncomeUsd },
             { label: spacePlanLabel(earnings.planType) + " 成本 / 月", value: earnings.monthlyCostUsd },
             { label: "预计净收益 / 月", value: earnings.monthlyNetUsd }].map(item =>
-            <div key={item.label} className="pb-2"><p className="text-[13px] text-muted-foreground">{item.label}</p>
-              <p className={cn("mt-1 text-lg font-semibold", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className="flex-wrap [&_.text-xs]:text-[13px]" value={item.value} cnyRate={cnyRate} /></p></div>)}
-        </div>
-        <div className={cn("grid gap-3", business && "xl:grid-cols-2")}>
-          {business && <section className="min-w-0 space-y-2.5 rounded-md border p-3">
+            <div key={item.label} className="min-w-0 py-1.5 sm:px-4 sm:first:pl-0 sm:last:pr-0"><dt className="text-[13px] text-muted-foreground">{item.label}</dt>
+              <dd className={cn("mt-1", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className="flex-wrap [&>span:first-child]:text-base [&>span:first-child]:font-semibold [&>span:last-child]:text-[13px] [&>span:last-child]:font-normal" value={item.value} cnyRate={cnyRate} /></dd></div>)}
+        </dl>
+        <div className={cn("grid items-start gap-3", business && "xl:grid-cols-2")}>
+          {business && <section data-mother-seat className="min-w-0 space-y-3 rounded-md border p-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><h3 className="text-[13px] font-medium text-muted-foreground">{motherLabel}</h3><p className="mt-1 break-all font-mono text-sm">{mother.email}</p></div>
+              <div className="min-w-0"><h3 className="text-[13px] font-medium text-muted-foreground">{motherLabel}</h3><p className="mt-1 break-words font-mono text-sm [overflow-wrap:anywhere]">{mother.email.includes("@") ? <>{mother.email.slice(0, mother.email.lastIndexOf("@"))}<wbr />{mother.email.slice(mother.email.lastIndexOf("@"))}</> : mother.email}</p></div>
               <Badge variant="outline">{SEAT_USAGE_LABELS[motherSeat.usageStatus]}</Badge>
             </div>
-            <p className="break-words text-[13px] text-muted-foreground">联系方式：{mother.contact || "—"} · 加入日期：{mother.joinedDate ?? "未登记"}</p>
-            {mother.label && <p className="break-all text-[13px] text-muted-foreground">备注：{mother.label}</p>}
+            <dl className="grid gap-x-4 gap-y-2 text-[13px] sm:grid-cols-2">
+              <div className="min-w-0"><dt className="text-muted-foreground">联系方式</dt><dd className="mt-0.5 break-words">{mother.contact || "—"}</dd></div>
+              <div><dt className="text-muted-foreground">加入日期</dt><dd className="mt-0.5 font-mono">{mother.joinedDate ?? "未登记"}</dd></div>
+              {mother.label && <div className="min-w-0 sm:col-span-2"><dt className="text-muted-foreground">备注</dt><dd className="mt-0.5 break-words">{mother.label}</dd></div>}
+            </dl>
             {metrics(motherSeat)}
-            {motherSeat.usageStatus === "rented" && <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
-              {motherCurrency && <span>约定收费：{formatCurrencyMinor(mother.expectedAmountMinor, motherCurrency)} / {PERIODS.find(p => p.value === mother.billingPeriodUnit + ":" + mother.billingPeriodCount)?.label ?? "每周期"}</span>}
-              <span>下一付款日：{motherDue ?? "未登记"}</span>
-              {motherDue && <ExpiryBadge expiryDate={motherDue} soonDays={soonDays} expireOnDate />}
-            </div>}
+            {motherSeat.usageStatus === "rented" && <dl className="grid gap-3 border-t pt-2.5 text-[13px] sm:grid-cols-2">
+              {motherCurrency && <div><dt className="text-muted-foreground">约定收费</dt><dd className="mt-1"><span className="font-mono font-medium">{formatCurrencyMinor(mother.expectedAmountMinor, motherCurrency)}</span><span className="ml-1 text-muted-foreground">/ {PERIODS.find(p => p.value === mother.billingPeriodUnit + ":" + mother.billingPeriodCount)?.label ?? "每周期"}</span></dd></div>}
+              <div><dt className="text-muted-foreground">下一付款日</dt><dd className="mt-1 flex flex-wrap items-center gap-2"><span className="font-mono">{motherDue ?? "未登记"}</span>{motherDue && <ExpiryBadge expiryDate={motherDue} soonDays={soonDays} expireOnDate />}</dd></div>
+            </dl>}
             <div className="flex flex-wrap gap-1">
               <Button size="sm" variant="outline" disabled={pending} onClick={editMother}><Pencil className="size-3.5" />编辑{motherLabel}</Button>
               {motherSeat.usageStatus === "rented" && <Button size="sm" variant="ghost" disabled={pending || !motherDue} onClick={() => setConfirmation({ action: "renew", role: "mother" })}><RefreshCw className="size-3.5" />续费</Button>}
             </div>
           </section>}
           {shared && <section id="child-accounts" className="min-w-0 space-y-2.5 rounded-md border p-3">
-            <h3 className="text-[13px] font-medium text-muted-foreground">{memberLabel}{!business && <span className="ml-2 font-normal">{accounts.length} 人</span>}</h3>
+            <h3 className="text-[13px] font-medium text-muted-foreground">{memberLabel}<span className="ml-2 font-normal">{accounts.length} {business ? "个" : "人"}</span></h3>
             {accounts.length ? <div className="divide-y">{accounts.map(account => {
               const child = account.childAccount;
               const seat = earnings.seats.find(item => item.role === "child" && item.id === child.id)!;
               const due = child.nextPaymentDate ?? nextPaymentDueDate(child.monthlyPaymentDay,
                 { unit: child.billingPeriodUnit as "month" | "quarter" | "year", count: child.billingPeriodCount }, child.joinedDate);
-              return <div key={child.id} className="space-y-2.5 py-3 first:pt-0 last:pb-0">
+              return <article data-member-row key={child.id} className="@container py-3 first:pt-0 last:pb-0">
+                <div className="grid items-start gap-4 @[700px]:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+                <div className="min-w-0 space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2"><p className="break-all font-mono text-sm font-medium">{child.email}</p>
                   <div className="flex flex-wrap gap-1.5">
                     <Badge variant="outline">{SEAT_USAGE_LABELS[seat.usageStatus]}</Badge></div></div>
                 <p className="break-words text-[13px] text-muted-foreground">联系方式：{child.contact || "—"} · 加入日期：{child.joinedDate}</p>
                 {child.label && <p className="break-all text-[13px] text-muted-foreground">备注：{child.label}</p>}
-                {metrics(seat)}
                 <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
                   <span>约定收费：{formatCurrencyMinor(child.monthlyAmountMinor, account.currency)} / {PERIODS.find(p => p.value === child.billingPeriodUnit + ":" + child.billingPeriodCount)?.label ?? "每周期"}</span>
                   {seat.usageStatus === "rented" && <><span>下一付款日：{due}</span><ExpiryBadge expiryDate={due} soonDays={soonDays} expireOnDate /></>}
                 </div>
-                <div className="flex flex-wrap gap-1">
+                </div>
+                <div className="min-w-0 space-y-2.5">
+                {metrics(seat, true)}
+                <div className="flex flex-wrap justify-end gap-1">
                   <Button size="sm" variant="outline" disabled={pending} onClick={() => editMember(account)}><Pencil className="size-3.5" />编辑</Button>
                   {seat.usageStatus === "rented" && <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmation({ action: "renew", role: "child", account })}><RefreshCw className="size-3.5" />续费</Button>}
                   <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmation({ action: "delete", role: "child", account })}><Trash2 className="size-3.5" />删除</Button>
                 </div>
-              </div>;
+                </div>
+                </div>
+              </article>;
             })}</div> : <div className="space-y-3 py-5 text-center text-sm text-muted-foreground">
               <p>{business ? "子账号位置空闲。" : "还没有拼车成员，添加后可分别记录收费和使用状态。"}</p>
             </div>}
@@ -238,10 +246,10 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
         </div>
       </CardContent>
       <Dialog open={editor !== null} onOpenChange={open => { if (!open && !pending) setEditor(null); }}>
-        <DialogContent className="sm:max-w-4xl">
-          <DialogHeader><DialogTitle>{editor?.role === "mother" ? "编辑" + motherLabel : (editor?.account ? "编辑" : "新增") + memberLabel}</DialogTitle>
-            <DialogDescription>修改约定收费不会自动登记收款。</DialogDescription></DialogHeader>
-          <form onSubmit={save}><fieldset disabled={pending} className="grid gap-4 md:grid-cols-2">
+        <DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="min-w-0 border-b px-5 py-4 pr-12"><DialogTitle>{editor?.role === "mother" ? "编辑" + motherLabel : (editor?.account ? "编辑" : "新增") + memberLabel}</DialogTitle>
+            <DialogDescription><span className="mb-1 block break-words font-mono text-foreground [overflow-wrap:anywhere]">{editor?.role === "mother" ? mother.email : editor?.account?.childAccount.email}</span>修改约定收费不会自动登记收款。</DialogDescription></DialogHeader>
+          <form onSubmit={save} className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"><fieldset data-account-form-fields disabled={pending} className="grid min-h-0 gap-4 overflow-y-auto px-5 py-4 md:grid-cols-2">
             <section aria-labelledby="account-profile-title" className="space-y-3">
               <h3 id="account-profile-title" className="text-sm font-semibold">账号资料</h3>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -282,9 +290,10 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
               </div>
             </section>
             {saveError?.field === "form" && <p role="alert" className="rounded-md border border-destructive/25 bg-destructive/5 p-2.5 text-sm text-destructive md:col-span-2">{saveError.message}</p>}
-            <div className="sticky -bottom-5 flex justify-end gap-2 border-t bg-popover pb-1 pt-3 md:col-span-2"><Button type="button" variant="outline" onClick={() => setEditor(null)}>取消</Button>
-              <Button type="submit">{pending ? "保存中…" : "保存全部修改"}</Button></div>
-          </fieldset></form>
+          </fieldset>
+            <div data-account-form-footer className="flex shrink-0 justify-end gap-2 border-t bg-popover px-5 py-3"><Button type="button" variant="outline" disabled={pending} onClick={() => setEditor(null)}>取消</Button>
+              <Button type="submit" disabled={pending}>{pending ? "保存中…" : "保存全部修改"}</Button></div>
+          </form>
         </DialogContent>
       </Dialog>
       <AlertDialog open={confirmation !== null} onOpenChange={open => { if (!open && !pending) setConfirmation(null); }}>

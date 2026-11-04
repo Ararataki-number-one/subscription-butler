@@ -34,8 +34,10 @@ export function WorkspaceHeader() {
   const pathname = usePathname();
   const heading = context?.heading;
   return <header data-workspace-header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 sm:px-6 lg:px-8">
+    <a href="#workspace-main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:outline-2 focus:outline-offset-2 focus:outline-ring">跳到主内容</a>
     <SidebarTrigger aria-label="切换侧边栏" />
     <div className="h-4 w-px bg-border" aria-hidden="true" />
+    {pathname.startsWith("/reference-data/") && <span data-workspace-context className="shrink-0 text-xs text-muted-foreground">基础数据 <span aria-hidden="true" className="ml-2">/</span></span>}
     {heading ? <h1 className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight" title={heading.title}>{heading.title}</h1>
       : <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">{locationLabel(pathname)}</span>}
     {heading?.actions && <div data-workspace-actions className="flex shrink-0 items-center gap-2">{heading.actions}</div>}

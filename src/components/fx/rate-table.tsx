@@ -134,23 +134,21 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
           </Button>
         </div>} />
 
-      {/* As-of label is always shown whenever a cache exists, stale or not (D-05). */}
-      {asOf && (
-        <p className="mt-4 text-sm text-muted-foreground">
-          当前基准 {base} · 缓存更新于 {asOf}
-        </p>
-      )}
-      <p className="mt-2 text-sm text-muted-foreground">每 1 {base} 可兑换下表金额，成交价以支付渠道为准。</p>
-      <details className="mt-2 text-xs text-muted-foreground"><summary className="w-fit cursor-pointer">汇率来源与报价说明</summary>
+      <div data-rate-context className="flex flex-wrap items-start justify-between gap-3"><div className="space-y-1">
+      <p className="text-sm">每 <strong className="font-mono">1 {base}</strong> 可兑换下表金额<span className="ml-2 text-xs text-muted-foreground">成交价以支付渠道为准</span></p>
+      {asOf && <p className="text-xs text-muted-foreground">缓存更新于 <span className="font-mono">{asOf}</span></p>}
+      </div>
+      <details className="text-xs text-muted-foreground"><summary className="w-fit cursor-pointer">汇率来源与报价说明</summary>
         <p className="mt-2 max-w-3xl leading-6">BOB 使用玻利维亚央行官方报价；其他币种使用 Frankfurter（欧洲央行）参考汇率。跨币种换算可能使用不同日期的最近报价。</p>
       </details>
+      </div>
 
       {showStaleBanner && (
-        <Alert variant="destructive" className="mt-4">
+        <Alert variant="destructive" className="mt-3 gap-y-0 py-2">
           <TriangleAlert />
-          <AlertTitle>汇率可能已过期</AlertTitle>
+          <AlertTitle>当前为缓存报价</AlertTitle>
           <AlertDescription>
-            无法连接汇率服务，当前显示上次缓存的汇率。请检查网络后重试“刷新汇率”。
+            如需更新报价，请检查网络后点“刷新汇率”。
           </AlertDescription>
         </Alert>
       )}
@@ -205,11 +203,11 @@ export function RateTable({ rates, fetchedAt, stale, base }: RateTableProps) {
 
               return (
                 <TableRow key={rate.currencyCode}>
-                  <TableCell className="font-mono">
+                  <TableCell className="font-mono font-medium">
                     {rate.currencyCode}
                   </TableCell>
                   <TableCell className="font-mono">{currency.symbol}</TableCell>
-                  <TableCell className="text-right font-mono" title={displayRate === null ? undefined : String(displayRate)}>
+                  <TableCell className="text-right font-mono font-medium" title={displayRate === null ? undefined : String(displayRate)}>
                     {formatRate(displayRate)}
                   </TableCell>
                   <TableCell className="text-right font-mono">

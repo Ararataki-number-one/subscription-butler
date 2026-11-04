@@ -233,9 +233,9 @@ export function StatusThresholdForm({
 
   return (
     <div className="contents">
-      <Card className="lg:col-span-2">
+      <Card id="reminder-thresholds" className="scroll-mt-32 lg:col-span-2">
         <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>到期提醒提前天数</CardTitle><span role="status" className="text-xs text-muted-foreground">{isThresholdPending ? "保存中…" : thresholdDirty ? "待保存" : "已保存"}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>到期提醒提前天数</CardTitle><span role="status" data-status-tone={isThresholdPending ? "info" : thresholdDirty ? "draft" : "neutral"} className={`rounded-md border px-2 py-0.5 text-xs ${statusTone(isThresholdPending ? "info" : thresholdDirty ? "draft" : "neutral")}`}>{isThresholdPending ? "保存中…" : thresholdDirty ? "待保存" : "已保存"}</span></div>
         </CardHeader>
         <CardContent>
           <form onSubmit={onThresholdSubmit} className="space-y-5">
@@ -288,24 +288,25 @@ export function StatusThresholdForm({
             </div>
 
             {thresholdError ? (
-              <p className="text-sm text-destructive">{thresholdError}</p>
+              <p role="alert" className="text-sm text-destructive">{thresholdError}</p>
             ) : null}
 
-            <Button type="submit" disabled={isThresholdPending}>
+            <div data-settings-savebar className="flex flex-wrap items-center justify-between gap-3 border-t pt-3"><span className="text-xs text-muted-foreground">{thresholdDirty ? "当前提醒天数尚未保存" : "控制临期提示范围"}</span><Button type="submit" disabled={isThresholdPending}>
               <Save className="size-4" />
-              保存设置
-            </Button>
+              保存提醒天数
+            </Button></div>
           </form>
         </CardContent>
       </Card>
 
-      <Card id="space-email-settings" className={emailDraft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
+      <Card id="space-email-settings" className={emailDraft.enabled ? "scroll-mt-32 lg:col-span-2" : "scroll-mt-32"}>
         <CardHeader className="border-b">
           <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>空间邮件提醒</CardTitle><span role="status" data-status-tone={isEmailPending ? "info" : emailDirty ? "draft" : "neutral"} className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${statusTone(isEmailPending ? "info" : emailDirty ? "draft" : "neutral")}`}>{isEmailPending ? "保存中…" : emailDirty ? "待保存" : savedEmail.enabled ? "已开启" : "已关闭"}</span></div>
           <CardDescription>未续费空间进入到期提醒窗口后，每天按指定时间发送。</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onEmailSubmit} className="space-y-5">
+          <form onSubmit={onEmailSubmit} className={emailDraft.enabled ? "flex max-h-[calc(100dvh-18rem)] min-h-0 flex-col gap-4" : "space-y-5"}>
+            <div className={emailDraft.enabled ? "min-h-0 space-y-5 overflow-y-auto overscroll-contain py-2 pr-1" : "space-y-5"}>
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <Label htmlFor="spaceEmailReminderEnabled">
@@ -313,14 +314,14 @@ export function StatusThresholdForm({
                 </Label>
 
               </div>
-              <Switch
+              <span className="relative inline-flex shrink-0 px-3"><Switch
                 id="spaceEmailReminderEnabled"
                 checked={emailDraft.enabled}
                 onCheckedChange={(checked) =>
                   updateEmailDraft("enabled", checked)
                 }
                 disabled={isEmailPending}
-              />
+              /></span>
             </div>
 
             {emailDraft.enabled ? (
@@ -565,14 +566,15 @@ export function StatusThresholdForm({
               </>
             ) : null}
 
+            </div>
             {emailError ? (
               <p role="alert" className="text-sm text-destructive">{emailError}</p>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div data-settings-savebar className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t bg-card pt-3">{emailDirty && <span className="mr-auto text-xs text-muted-foreground">空间邮件修改尚未保存</span>}
               <Button type="submit" disabled={isEmailPending}>
                 <Save className="size-4" />
-                保存设置
+                保存空间邮件
               </Button>
               {emailDraft.enabled ? (
                 <Button

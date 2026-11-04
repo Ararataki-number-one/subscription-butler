@@ -3,6 +3,7 @@
 import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { ReceiptText } from "lucide-react";
 import { toast } from "sonner";
 import { saveAccountReceipt, deleteAccountReceipt } from "@/actions/accountReceipts";
 import type { AccountReceiptListRow, AccountReceiptRow } from "@/db/accountReceipts";
@@ -108,14 +109,14 @@ export function AccountReceipts({ spaceId, rows, currencies, contact, cnyRate = 
   const totalUsd = rows.reduce((sum, { receipt }) => sum + receipt.amountUsd, 0);
   const selectedCurrency = currencies.find(c => c.code === code);
   return (
-    <Card className="min-w-0">
+    <Card id="account-receipts" className="min-w-0 scroll-mt-36">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>收款记录</CardTitle>
-          <Button onClick={() => openEditor()} disabled={pending || !!editor}>登记收款</Button>
+          <CardTitle>收款记录 <span className="ml-2 text-[13px] font-normal text-muted-foreground">{rows.length} 笔</span></CardTitle>
+          {rows.length > 0 && !editor && <Button onClick={() => openEditor()} disabled={pending || !!editor}>登记收款</Button>}
         </div>
         <CardDescription className="space-y-1 text-[13px] leading-5">
-          <p>共 <span className="font-medium text-foreground">{rows.length}</span> 笔 · 累计参考折合 <span className="font-mono text-foreground">{dualMoneyText(totalUsd, cnyRate)}</span></p>
+          <p>累计参考折合 <span className="font-mono text-foreground">{dualMoneyText(totalUsd, cnyRate)}</span></p>
           <p>实收以原币金额为准；美元保留收款汇率快照，人民币按缓存汇率参考折算。账号续费后保留全部记录。</p>
         </CardDescription>
       </CardHeader>
@@ -125,9 +126,8 @@ export function AccountReceipts({ spaceId, rows, currencies, contact, cnyRate = 
             <div className="flex items-center justify-between gap-4 border-b border-primary/15 bg-background px-4 py-3">
               <div>
                 <h3 id="receipt-editor-title" className="text-sm font-semibold text-primary">{editor.id ? "编辑收款" : "登记收款"}</h3>
-                <p className="mt-1 text-[13px] text-muted-foreground">按实际到账填写，金额与币种一起保存。</p>
+                <p className="mt-1 text-[13px] text-muted-foreground">按实际到账填写。</p>
               </div>
-              <Button type="button" variant="outline" disabled={pending} onClick={() => setEditor(null)}>取消</Button>
             </div>
             <fieldset disabled={pending} className="min-w-0 space-y-4 p-4">
               <legend className="sr-only">收款信息</legend>
@@ -153,7 +153,7 @@ export function AccountReceipts({ spaceId, rows, currencies, contact, cnyRate = 
               {saveError && <div role="alert" className="rounded-md border border-destructive/25 bg-destructive/5 px-3 py-2 text-sm text-destructive">{saveError} <span className="font-normal">请检查后重试。</span></div>}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
                 <p className="text-[13px] text-muted-foreground">仅登记收款，不改变账号续费日期。</p>
-                <Button type="submit">{pending ? "保存中…" : "保存收款"}</Button>
+                <div className="flex shrink-0 gap-2"><Button type="button" variant="outline" disabled={pending} onClick={() => setEditor(null)}>取消</Button><Button type="submit">{pending ? "保存中…" : "保存收款"}</Button></div>
               </div>
             </fieldset>
           </form>
@@ -191,7 +191,10 @@ export function AccountReceipts({ spaceId, rows, currencies, contact, cnyRate = 
           </Table>
           </div>
           </div>
-        ) : !editor && <p className="py-8 text-center text-sm text-muted-foreground">暂无收款记录。收到款项后点击“登记收款”。</p>}
+        ) : !editor && <div className="flex flex-wrap items-center justify-between gap-4 rounded-md bg-muted/30 px-4 py-4">
+          <div className="flex items-center gap-3"><ReceiptText aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" /><div><h3 className="text-sm font-medium">暂无收款记录</h3><p className="mt-1 text-[13px] text-muted-foreground">仅登记实际到账；续费不会自动生成收款。</p></div></div>
+          <Button onClick={() => openEditor()} disabled={pending}>登记收款</Button>
+        </div>}
       </CardContent>
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open && !pending) setDeleteTarget(null); }}>
         <AlertDialogContent><AlertDialogHeader>

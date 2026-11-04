@@ -45,7 +45,7 @@ const referenceChildren = [
 ] as const;
 
 const activeClasses =
-  "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:font-semibold";
+  "relative before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary before:opacity-0 data-[active=true]:before:opacity-100 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground data-[active=true]:font-semibold";
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -64,7 +64,7 @@ export function AppSidebar() {
           </div>
         </div>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent role="navigation" aria-label="主导航">
         <SidebarGroup>
           <SidebarGroupLabel>工作区</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -109,6 +109,7 @@ export function AppSidebar() {
                         <SidebarMenuButton
                           asChild
                           isActive={isActive}
+                          tooltip={child.label}
                           className={activeClasses}
                         >
                           <Link

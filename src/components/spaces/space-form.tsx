@@ -267,9 +267,10 @@ function SpaceEditorForm({
           "grid",
           isDetailLayout
             ? "gap-x-6 gap-y-4 md:grid-cols-2 2xl:grid-cols-3"
-            : "gap-4 md:grid-cols-2",
+            : "min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden",
         )}
       >
+        <div className={isDetailLayout ? "contents" : "grid min-h-0 gap-4 overflow-y-auto px-5 py-4 md:grid-cols-2"} data-space-form-fields>
             <FormField
               control={form.control}
               name="name"
@@ -555,7 +556,7 @@ function SpaceEditorForm({
                 name="periodUnit"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className={isDetailLayout ? "sr-only" : undefined}>
+                    <FormLabel className={isDetailLayout ? "text-xs text-muted-foreground" : undefined}>
                       周期单位
                     </FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
@@ -581,7 +582,7 @@ function SpaceEditorForm({
                 name="periodCount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className={isDetailLayout ? "sr-only" : undefined}>
+                    <FormLabel className={isDetailLayout ? "text-xs text-muted-foreground" : undefined}>
                       数量
                     </FormLabel>
                     <FormControl>
@@ -610,8 +611,9 @@ function SpaceEditorForm({
                 {form.formState.errors.root.message}
               </p>
             ) : null}
+        </div>
             {isDetailLayout ? null : (
-              <div className="flex justify-end gap-2 md:col-span-2">
+              <div data-space-form-footer className="flex shrink-0 justify-end gap-2 border-t bg-popover px-5 py-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -670,8 +672,8 @@ export function SpaceForm({
 }: SpaceFormProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="border-b px-5 py-4">
           <DialogTitle>{mode === "add" ? "新增空间 / 账号" : "编辑空间 / 账号"}</DialogTitle>
           <DialogDescription>
             记录账号、支付成本和订阅周期；保存后自动计算到期日。

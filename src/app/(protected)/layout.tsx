@@ -31,7 +31,7 @@ export default async function ProtectedLayout({
       <SidebarInset>
         <WorkspaceHeaderProvider>
         <WorkspaceHeader />
-        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
+        <main id="workspace-main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col outline-none">{children}</main>
         </WorkspaceHeaderProvider>
       </SidebarInset>
     </SidebarProvider>
