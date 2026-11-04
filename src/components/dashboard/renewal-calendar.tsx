@@ -18,6 +18,10 @@ import { statusTone } from "@/components/ui/status-tone";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+function calendarFailureMessage(failure: unknown, fallback: string) {
+  if (failure instanceof TypeError || (failure instanceof DOMException && ["AbortError", "TimeoutError"].includes(failure.name))) return fallback;
+  return failure instanceof Error ? failure.message : fallback;
+}
 const daysFrom = (date: string, today: string) => Math.round((Date.parse(date + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 86400000);
 const keyOf = renewalCalendarOccurrenceKey;
 const roleLabel = (entry: RenewalCalendarEntry) => entry.role || (entry.kind === "subscription" ? "订阅续费" : entry.slotKind === "mother" ? "母号续费" : entry.slotKind === "child" ? "子账号续费" : entry.slotKind === "member" ? "拼车成员续费" : "账号续费");
@@ -54,7 +58,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
       const value = await response.json();
       if (!response.ok || !value.snapshot) throw new Error("续费事项暂未更新，请稍后重试。");
       setSnapshot(value.snapshot); setQuotes(value.quotes ?? []); setToday(shanghaiToday()); setError("");
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "续费事项暂未更新。"); }
+    } catch (failure) { setError(calendarFailureMessage(failure, "续费事项暂未更新，请检查连接后重试。")); }
     finally { refreshing.current = false; setBusy(false); }
   }, [router]);
   useEffect(() => { const timer = setInterval(() => void refresh(), 300000); return () => clearInterval(timer); }, [refresh]);
@@ -83,7 +87,7 @@ export function RenewalCalendar({ initialSnapshot, initialQuotes, classicSpaceId
       if (value.snapshot) setSnapshot(value.snapshot);
       setMessageTone(value.queued ? "info" : "success");
       setMessage(value.queued ? "操作已保存在本机待同步队列，中心确认后才会标为已续费。" : "已续费，下一期日期已延长；本期记录仍保留在原日期。");
-    } catch (failure) { setError(failure instanceof Error ? failure.message : "续费未完成，请重试。"); }
+    } catch (failure) { setError(calendarFailureMessage(failure, "续费未确认，请检查连接并刷新后重试。")); }
     finally { refreshing.current = false; setBusy(false); }
   }
   function amount(entry: RenewalCalendarEntry, detail = false, dense = false) {
