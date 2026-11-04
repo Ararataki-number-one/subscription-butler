@@ -388,7 +388,7 @@ export function SpaceTable({
           </div>
         </div>)}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">按当前筛选汇总 · 人民币 / 美元</p>
+      <p className="mt-2 text-xs text-muted-foreground">Business / Pro 按当前筛选汇总 · 人民币 / 美元</p>
       </div>
 
       {emailFilteredSpaces.length === 0 ? (

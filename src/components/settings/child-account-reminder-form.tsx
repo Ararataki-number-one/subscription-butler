@@ -16,6 +16,7 @@ import {
   Underline,
 } from "lucide-react";
 import { toast } from "sonner";
+import { statusTone } from "@/components/ui/status-tone";
 import {
   sendChildAccountEmailReminderTest,
   updateChildAccountEmailReminderSettings,
@@ -184,7 +185,7 @@ export function ChildAccountReminderForm({
   return (
     <Card id="child-email-settings" className={draft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
       <CardHeader className="border-b">
-        <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>子账号邮件提醒</CardTitle><span role="status" className="text-xs text-muted-foreground">{isPending ? "处理中…" : dirty ? "待保存" : savedDraft.enabled ? "已开启" : "已关闭"}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>子账号邮件提醒</CardTitle><span role="status" data-status-tone={isPending ? "info" : dirty ? "draft" : "neutral"} className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${statusTone(isPending ? "info" : dirty ? "draft" : "neutral")}`}>{isPending ? "处理中…" : dirty ? "待保存" : savedDraft.enabled ? "已开启" : "已关闭"}</span></div>
         <CardDescription>
           非自用子账号在下一付款日当天按指定时间发送一次，接收邮箱必填。
         </CardDescription>

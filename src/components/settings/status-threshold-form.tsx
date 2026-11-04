@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TimePicker } from "@/components/ui/time-picker";
 import { Switch } from "@/components/ui/switch";
+import { statusTone } from "@/components/ui/status-tone";
 import { TemplatePlaceholderList } from "@/components/settings/template-placeholder-list";
 import {
   renderRichTextTemplateBody,
@@ -300,7 +301,7 @@ export function StatusThresholdForm({
 
       <Card id="space-email-settings" className={emailDraft.enabled ? "scroll-mt-20 lg:col-span-2" : "scroll-mt-20"}>
         <CardHeader className="border-b">
-          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>空间邮件提醒</CardTitle><span role="status" className="text-xs text-muted-foreground">{isEmailPending ? "保存中…" : emailDirty ? "待保存" : savedEmail.enabled ? "已开启" : "已关闭"}</span></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>空间邮件提醒</CardTitle><span role="status" data-status-tone={isEmailPending ? "info" : emailDirty ? "draft" : "neutral"} className={`inline-flex rounded-md border px-2 py-0.5 text-xs ${statusTone(isEmailPending ? "info" : emailDirty ? "draft" : "neutral")}`}>{isEmailPending ? "保存中…" : emailDirty ? "待保存" : savedEmail.enabled ? "已开启" : "已关闭"}</span></div>
           <CardDescription>未续费空间进入到期提醒窗口后，每天按指定时间发送。</CardDescription>
         </CardHeader>
         <CardContent>

@@ -21,6 +21,8 @@ import { ArchiveDialog } from "./archive-dialog";
 import { ExpiryBadge } from "@/components/spaces/expiry-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { statusTone } from "@/components/ui/status-tone";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -103,7 +105,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
           { label: "可用渠道", value: activeCount, hint: (channels.length - activeCount) + " 个已归档" },
           { label: "常用渠道", value: favoriteCount, hint: "在订阅选择框中优先显示" },
           { label: "关联订阅", value: subscriptionCount, hint: "包含 Business 与独立账号" },
-          { label: "需要关注的订阅", value: attentionCount, hint: "已过期或 " + soonDays + " 天内到期" },
+          { label: "需要关注的订阅", value: attentionCount, hint: "已逾期或 " + soonDays + " 天内到期" },
         ].map(item => (
           <div key={item.label} className="px-4 py-3">
             <dt className="text-xs text-muted-foreground">{item.label}</dt>
@@ -158,7 +160,15 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
       </div>
       {visible.length ? (
         <div className="channel-table overflow-x-auto rounded-lg border bg-card">
-          <Table className="min-w-[880px]">
+          <Table className="min-w-[1040px] table-fixed">
+            <colgroup>
+              <col />
+              <col className="w-16" />
+              <col className="w-36" />
+              <col className="w-[190px]" />
+              <col className="w-44" />
+              <col className="w-[296px]" />
+            </colgroup>
             <TableHeader><TableRow>
               <TableHead>支付渠道</TableHead><TableHead>手续费</TableHead>
               <TableHead>关联订阅</TableHead><TableHead>当前周期成本</TableHead>
@@ -167,26 +177,32 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
             <TableBody>{visible.map(channel => {
               const stats = usage[channel.id] ?? EMPTY_USAGE;
               return <TableRow key={channel.id} className={cn("group", !channel.isActive && "bg-muted/30")}>
-                <TableCell className="max-w-52">
-                  <div className="flex items-center gap-2"><span className="font-medium">{channel.name}</span>
-                    {!channel.isActive && <Badge variant="secondary">已归档</Badge>}
-                  </div>
-                  <p className="mt-1 max-w-52 truncate text-xs text-muted-foreground" title={[channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}>
-                    {[channelTypeLabel(channel.channelType), channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}
-                  </p>
+                <TableCell className="whitespace-normal">
+                  <Tooltip>
+                    <TooltipTrigger asChild><span tabIndex={0} className="block min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                      <span className="flex min-w-0 items-center gap-2"><span className="min-w-0 truncate font-medium">{channel.name}</span>
+                        {!channel.isActive && <Badge variant="secondary">已归档</Badge>}
+                      </span>
+                      <span className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground" title={[channel.provider, channel.identifier, channel.note].filter(Boolean).join(" · ")}>
+                        <span className="min-w-0 truncate">{channelTypeLabel(channel.channelType)}</span>
+                        {channel.identifier && <span className="shrink-0 font-mono">{channel.identifier}</span>}
+                      </span>
+                    </span></TooltipTrigger>
+                    <TooltipContent className="max-w-sm break-words"><p>{channel.name}</p><p className="mt-1">{[channel.provider, channel.identifier].filter(Boolean).join(" · ")}</p></TooltipContent>
+                  </Tooltip>
                   {cards[channel.id] && <p className="mt-1 text-xs text-muted-foreground">卡片已加密保存{cards[channel.id].last4 ? ` · •••• ${cards[channel.id].last4}` : ""}</p>}
                 </TableCell>
                 <TableCell data-label="手续费" className="font-mono">{channel.feePercent}%</TableCell>
-                <TableCell data-label="关联订阅"><p className="font-mono">{stats.total} 个</p>
+                <TableCell data-label="关联订阅" className="whitespace-normal"><p className="font-mono">{stats.total} 个</p>
                   <p className="text-xs text-muted-foreground">Business {stats.teamCount} · 其他 {stats.independentCount}</p>
                 </TableCell>
-                <TableCell data-label="本期成本"><MoneyDisplay compact value={stats.costUsdMinor} cnyRate={cnyRate} className="font-medium" />
+                <TableCell data-label="本期成本" className="whitespace-normal"><MoneyDisplay compact value={stats.costUsdMinor} cnyRate={cnyRate} className="font-medium" />
                   {stats.missingCostCount > 0 && <p className="text-xs text-muted-foreground">{stats.missingCostCount} 笔待换算</p>}
                 </TableCell>
                 <TableCell data-label="最近到期"><p className="font-mono text-xs">{stats.nextExpiryDate ?? "—"}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
-                    {stats.overdueCount > 0 && <Badge variant="destructive">{stats.overdueCount} 个已过期</Badge>}
-                    {stats.soonCount > 0 && <Badge variant="outline">{stats.soonCount} 个近期到期</Badge>}
+                    {stats.overdueCount > 0 && <Badge data-status-tone="danger" className={statusTone("danger")}>{stats.overdueCount} 个已逾期</Badge>}
+                    {stats.soonCount > 0 && <Badge data-status-tone="warning" className={statusTone("warning")}>{stats.soonCount} 个即将到期</Badge>}
                   </div>
                 </TableCell>
                 <TableCell className="border-l bg-card group-hover:bg-muted sm:sticky sm:right-0"><div className="flex items-center justify-end gap-1">

@@ -17,7 +17,7 @@ export function WorkspaceHeaderProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [heading, setHeading] = useState<Heading | null>(null);
   const register = useCallback((next: Heading) => setHeading(current =>
-    current?.id === next.id && current.title === next.title && current.actions === next.actions ? current : next), []);
+    current?.id === next.id && current.pathname === next.pathname && current.title === next.title && current.actions === next.actions ? current : next), []);
   const unregister = useCallback((id: string) => setHeading(current => current?.id === id ? null : current), []);
   const value = useMemo(() => ({ heading: heading?.pathname === pathname ? heading : null, register, unregister }), [heading, pathname, register, unregister]);
   return <Context.Provider value={value}>{children}</Context.Provider>;

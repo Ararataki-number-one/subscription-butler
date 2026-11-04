@@ -83,7 +83,7 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
       const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].filter(row => row.getAttribute("data-renewal-kind") === "subscription" && row.getAttribute("data-renewal-id") === id);
       return rows.length === 2 && rows.filter(row => row.getAttribute("data-renewal-date") === originalDate && row.getAttribute("data-renewal-state") === "renewed").length === 1 && rows.filter(row => row.getAttribute("data-renewal-date") === nextDate && row.getAttribute("data-renewal-state") === "due-soon").length === 1;
     }, "upcoming table keeps original and next occurrences together across months", 20000, [recordId, dueDate, nextDueDate]);
-    for (const occurrence of [{ date: dueDate, state: "renewed", color: "emerald" }, { date: nextDueDate, state: "due-soon", color: "amber" }]) {
+    for (const occurrence of [{ date: dueDate, state: "renewed", color: "primary" }, { date: nextDueDate, state: "due-soon", color: "amber" }]) {
       await setInput('input[aria-label="日历月份"]', occurrence.date.slice(0, 7));
       await waitFor((id, login, date, state, color) => {
         const key = "subscription:" + id + ":" + date;
