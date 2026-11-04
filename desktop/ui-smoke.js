@@ -94,7 +94,7 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
         if (rows.length !== 1 || rows[0].getAttribute("data-renewal-state") !== state || !rows[0].querySelector("td:first-child span")?.className.includes(color)) return false;
         const action = rows[0].lastElementChild;
         return state === "renewed" ? action.textContent.trim() === "✓ 已续费" && action.querySelectorAll("button").length === 0
-          : [...action.querySelectorAll("button")].some(button => button.textContent.trim() === "已续费" && !button.disabled);
+          : [...action.querySelectorAll("button")].some(button => ["已续费", "标记已续费"].includes(button.textContent.trim()) && !button.disabled);
       }, "calendar retains completed and pending occurrences with their colors", 20000, [recordId, account, occurrence.date, occurrence.state, occurrence.color]);
     }
   }
@@ -239,7 +239,7 @@ async function runUiSmoke({ BrowserWindow, url, authSecret, userData, preload, e
       const table = document.querySelector('table[aria-label="即将到期"]');
       const rows = [...(table?.querySelectorAll("tbody tr") ?? [])].filter(row => row.getAttribute("data-renewal-kind") === "subscription" && row.getAttribute("data-renewal-id") === recordId && row.getAttribute("data-renewal-date") === dueDate);
       if (rows.length !== 1) throw new Error("Original calendar renewal row is not unique");
-      const buttons = [...rows[0].lastElementChild.querySelectorAll("button")].filter(button => button.textContent.trim() === "已续费" && !button.disabled);
+      const buttons = [...rows[0].lastElementChild.querySelectorAll("button")].filter(button => ["已续费", "标记已续费"].includes(button.textContent.trim()) && !button.disabled);
       if (buttons.length !== 1) throw new Error("Original calendar renewal action is unavailable");
       buttons[0].click(); buttons[0].click();
     }, near.id, near.endDate);
