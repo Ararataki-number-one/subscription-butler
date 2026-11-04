@@ -22,24 +22,23 @@ export function TeamEarningsSummary({ earnings, cnyRate = null }: { earnings: Te
       <TooltipTrigger asChild>
         <Link href={`/spaces/${earnings.spaceId}#team-earnings`}
           aria-label="查看账号状态与收益明细"
-          className="block w-fit min-w-44 space-y-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-          <div className="flex items-center gap-2 text-xs">
+          className="block min-w-0 space-y-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+          <div className="flex items-start gap-1">
+            <span className={cn("min-w-0 font-mono text-sm font-semibold tabular-nums",
+              earnings.monthlyNetUsd === null ? "text-muted-foreground" : earnings.monthlyNetUsd < 0 ? "text-destructive" : "text-primary")}>
+              <MoneyDisplay value={earnings.monthlyNetUsd} cnyRate={cnyRate} compact className="gap-x-1.5 gap-y-0" />
+            </span>
+            {earnings.unmarkedCount > 0 && <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-label="含待标记账号，收益为已知收入估算" />}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           {roles.map(role => {
         const seats = earnings.seats.filter(seat => seat.role === role);
         const states = Array.from(new Set(seats.map(seat => SEAT_USAGE_LABELS[seat.usageStatus]))).join(" / ") || "暂无成员";
-        return <span key={role} className="inline-flex shrink-0 items-center gap-1">
+        return <span key={role} className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
           <span className="text-muted-foreground">{role === "mother" ? "母号" : business ? "子账号" : `拼车 ${seats.length}人`}</span>
-          <Badge variant="outline" className="max-w-24 truncate px-1.5 py-0 text-xs font-normal">{states}</Badge>
+          <Badge variant="outline" className="h-auto min-h-5 whitespace-normal px-1.5 py-0 text-xs font-normal">{states}</Badge>
         </span>;
       })}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">月净收益</span>
-            <span className={cn("font-mono text-sm font-semibold tabular-nums",
-              earnings.monthlyNetUsd === null ? "text-muted-foreground" : earnings.monthlyNetUsd < 0 ? "text-destructive" : "text-primary")}>
-              <MoneyDisplay value={earnings.monthlyNetUsd} cnyRate={cnyRate} compact />
-            </span>
-            {earnings.unmarkedCount > 0 && <CircleAlert className="size-3.5 text-amber-600" aria-label="含待标记账号，收益为已知收入估算" />}
           </div>
         </Link>
       </TooltipTrigger>

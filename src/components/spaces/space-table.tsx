@@ -183,12 +183,12 @@ function SortableHead({
       : ArrowDown
     : ArrowUpDown;
   return (
-    <TableHead scope="col" className={`text-center ${className ?? ""}`}>
+    <TableHead scope="col" className={`text-left ${className ?? ""}`}>
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className="mx-auto h-8 px-1.5 font-medium"
+        className="-ml-1.5 h-8 px-1.5 font-medium"
         aria-sort={
           active
             ? sort.direction === "asc"
@@ -378,13 +378,13 @@ export function SpaceTable({
             </SelectContent>
           </Select>
         </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        {totalsByPlan.map(group => <div key={group.label} className="rounded-lg border bg-card px-4 py-3">
+      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        {totalsByPlan.map(group => <div key={group.label} className="min-w-0 rounded-lg border bg-card px-3 py-2">
           <div className="flex justify-between text-sm font-semibold"><span>{group.label}</span><span className="text-xs font-normal text-muted-foreground">{group.count} 个订阅</span></div>
-          <div className="mt-2 grid grid-cols-3 gap-3 text-xs">
-            <div className="text-muted-foreground">约定收入 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.income} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
-            <div className="text-muted-foreground">成本 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.cost} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
-            <div className="text-muted-foreground">预计净收益 / 月<p className="mt-1 text-base text-foreground"><MoneyDisplay value={group.net} cnyRate={cnyRate} compact className="w-full [&>span+span]:basis-full min-[1360px]:[&>span+span]:basis-auto" /></p></div>
+          <div className="mt-1 grid grid-cols-3 gap-3 text-xs">
+            <div className="min-w-0 text-muted-foreground">约定收入 / 月<p className="mt-0.5 text-sm text-foreground"><MoneyDisplay value={group.income} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
+            <div className="min-w-0 text-muted-foreground">成本 / 月<p className="mt-0.5 text-sm text-foreground"><MoneyDisplay value={group.cost} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
+            <div className="min-w-0 text-muted-foreground">预计净收益 / 月<p className={`mt-0.5 text-sm ${group.net !== null && group.net < 0 ? "text-destructive" : "text-foreground"}`}><MoneyDisplay value={group.net} cnyRate={cnyRate} className="gap-0 font-medium" /></p></div>
           </div>
         </div>)}
       </div>
@@ -416,19 +416,25 @@ export function SpaceTable({
         <div className="mx-4 mb-3 min-h-0 flex-1 overflow-auto rounded-lg border bg-card sm:mx-6 lg:mx-8">
             <table
               data-slot="table"
-              className="w-full min-w-[980px] caption-bottom text-sm [&_td]:py-3"
+              className="w-full min-w-[1040px] table-fixed caption-bottom text-sm"
             >
+          <colgroup>
+            <col className="w-[24%] 2xl:w-1/4" />
+            <col className="hidden w-[8%] 2xl:table-column" />
+            <col className="w-[16%] 2xl:w-[15%]" />
+            <col className="w-[18%] 2xl:w-[16%]" />
+            <col className="w-[12%] 2xl:w-[10%]" />
+            <col className="w-[18%]" />
+            <col className="w-[12%] 2xl:w-[8%]" />
+          </colgroup>
           <TableHeader className="sticky top-0 z-20 bg-card [&_th]:bg-card">
             <TableRow>
               <SortableHead
-                label="名称"
+                label="订阅 / 账号"
                 sortKey="name"
                 sort={sort}
                 onSort={setSortKey}
               />
-              <TableHead scope="col" className="hidden text-left min-[1360px]:table-cell">
-                账号 / 母号邮箱
-              </TableHead>
               <SortableHead
                 label="国家/地区"
                 className="hidden 2xl:table-cell"
@@ -443,7 +449,7 @@ export function SpaceTable({
                 onSort={setSortKey}
               />
               <SortableHead
-                label="金额"
+                label="订阅成本"
                 sortKey="amount"
                 sort={sort}
                 onSort={setSortKey}
@@ -454,7 +460,7 @@ export function SpaceTable({
                 sort={sort}
                 onSort={setSortKey}
               />
-              <TableHead scope="col" className="text-left">账号状态 / 净收益<br /><span className="text-xs font-normal">月折算 · 人民币 / 美元</span></TableHead>
+              <TableHead scope="col" className="text-left">月净收益 / 账号状态</TableHead>
               <TableHead scope="col" className="sticky right-0 z-30 border-l text-center">
                 操作
               </TableHead>
@@ -463,36 +469,47 @@ export function SpaceTable({
           <TableBody>
             {visibleSpaces.map((row) => {
               const { space, motherAccount, paymentChannel, currency } = row;
+              const nativeMatchesUsd = currency.code === "USD" && space.amountUsd === space.amountMinor + space.feeAmountMinor;
               return (
                 <TableRow key={space.id} className="group">
-                  <TableCell className="min-w-48 font-medium min-[1360px]:min-w-28">
-                    <div className="mb-1"><Badge variant="outline">{spacePlanLabel(space.planType, space.customPlanName)}</Badge>
-                      {isProPlan(space.planType) && <span className="ml-1 text-xs text-muted-foreground">拼车</span>}
-                    </div>
-                    <Link
-                      href={`/spaces/${space.id}`}
-                      className="hover:underline"
-                    >
-                      {space.name}
-                    </Link>
-                    <span className="mt-1 block max-w-48 truncate font-mono text-xs font-normal text-muted-foreground min-[1360px]:hidden" title={motherAccount.email}>{motherAccount.email}</span>
+                  <TableCell className="whitespace-normal">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href={`/spaces/${space.id}`} className="block min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/40">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-words font-medium">{space.name}</span><Badge variant="outline">{spacePlanLabel(space.planType, space.customPlanName)}</Badge>{isProPlan(space.planType) && <span className="text-xs text-muted-foreground">拼车</span>}</span>
+                          <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">{motherAccount.email}</span>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm break-all">{motherAccount.email}</TooltipContent>
+                    </Tooltip>
                   </TableCell>
-                  <TableCell className="hidden font-mono text-[13px] min-[1360px]:table-cell">
-                    <span className="block max-w-56 truncate" title={motherAccount.email}>{motherAccount.email}</span>
-                  </TableCell>
-                  <TableCell className="hidden text-center 2xl:table-cell">
+                  <TableCell className="hidden whitespace-normal text-xs 2xl:table-cell">
                     {formatCountryLabel(space.country)}
                   </TableCell>
-                  <TableCell className="text-center">{paymentChannel.name}<span className="mt-1 block text-xs text-muted-foreground 2xl:hidden">{formatCountryLabel(space.country)}</span></TableCell>
-                  <TableCell className="min-w-[185px] font-mono">
-                    <div className="inline-flex min-w-40 flex-col items-start gap-1 text-left tabular-nums">
-                      <MoneyDisplay value={space.amountUsd} cnyRate={cnyRate} compact className="font-medium" />
-                      <span className="whitespace-nowrap text-xs leading-5 text-muted-foreground" title="原币合计，已包含支付手续费">{formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}{space.feeAmountMinor > 0 ? " · 含" + space.feePercent + "%费" : ""}</span>
+                  <TableCell className="whitespace-normal">
+                    <Tooltip>
+                      <TooltipTrigger asChild><span tabIndex={0} className="block min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                        <span className="block truncate">{paymentChannel.provider || paymentChannel.name}</span>
+                        <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                          {paymentChannel.identifier && <span className="break-all font-mono">{paymentChannel.identifier}</span>}
+                          <span className="2xl:hidden">{formatCountryLabel(space.country)}</span>
+                        </span>
+                      </span></TooltipTrigger>
+                      <TooltipContent className="max-w-sm break-words">{paymentChannel.name}</TooltipContent>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell className="whitespace-normal font-mono">
+                    <div className="flex min-w-0 flex-col items-start gap-1 text-left tabular-nums">
+                      <MoneyDisplay value={space.amountUsd} cnyRate={cnyRate} compact className="gap-x-1.5 gap-y-0 font-medium" />
+                      <span className="flex flex-wrap gap-x-1.5 text-xs leading-5 text-muted-foreground" title="原币合计，已包含支付手续费">
+                        <span>{nativeMatchesUsd ? "原币" : formatCurrencyMinor(space.amountMinor + space.feeAmountMinor, currency)}</span>
+                        {space.feeAmountMinor > 0 ? <span>含 {space.feePercent}% 费</span> : nativeMatchesUsd && <span>无手续费</span>}
+                      </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell>
                     <div className="flex flex-col items-start justify-center gap-1.5">
-                      <span className="font-mono">
+                      <span className="whitespace-nowrap font-mono text-sm">
                         {space.expiryDate ?? "-"}
                       </span>
                       <ExpiryBadge
@@ -501,7 +518,7 @@ export function SpaceTable({
                       />
                     </div>
                   </TableCell>
-                  <TableCell className="align-middle">
+                  <TableCell className="whitespace-normal align-middle">
                     {teamEarnings[space.id] ? <TeamEarningsSummary earnings={teamEarnings[space.id]} cnyRate={cnyRate} />
                       : <span className="text-xs text-muted-foreground">独立账号</span>}
                   </TableCell>
