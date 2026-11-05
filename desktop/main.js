@@ -359,10 +359,10 @@ function loadingHtml() {
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
     <title>${APP_NAME}</title><style>
     :root{color-scheme:light;font-family:"Segoe UI","Microsoft YaHei",sans-serif}
-    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f9f8;color:#17212b}
-    main{text-align:center}.mark{width:56px;height:56px;margin:0 auto 20px;border-radius:15px;background:#00795e;display:grid;place-items:center;color:white;font-size:24px;font-weight:700}
-    h1{margin:0;font-size:22px}p{margin:12px 0 0;color:#68747e;font-size:14px}
-    .bar{width:220px;height:3px;margin:24px auto 0;border-radius:2px;overflow:hidden;background:#dfe5e8}.bar::after{content:"";display:block;width:45%;height:100%;background:#00795e;animation:move 1.2s ease-in-out infinite}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6f5;color:#182c24}
+    main{text-align:center}.mark{width:56px;height:56px;margin:0 auto 20px;border-radius:15px;background:#0b7157;display:grid;place-items:center;color:white;font-size:24px;font-weight:700}
+    h1{margin:0;font-size:22px}p{margin:12px 0 0;color:#56665e;font-size:14px}
+    .bar{width:220px;height:3px;margin:24px auto 0;border-radius:2px;overflow:hidden;background:#dde5df}.bar::after{content:"";display:block;width:45%;height:100%;background:#0b7157;animation:move 1.2s ease-in-out infinite}
     @keyframes move{from{transform:translateX(-110%)}to{transform:translateX(250%)}}
     </style><main><div class="mark">订</div><h1>${APP_NAME}</h1><p>正在启动本地数据服务…</p><div class="bar"></div></main></html>`;
 }
@@ -370,7 +370,7 @@ function loadingHtml() {
 async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1320, height: 860, minWidth: 980, minHeight: 680, show: false,
-    backgroundColor: "#f5f9f8", title: APP_NAME,
+    backgroundColor: "#f4f6f5", title: APP_NAME,
     icon: path.join(__dirname, "assets", "icon.ico"),
     webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true,

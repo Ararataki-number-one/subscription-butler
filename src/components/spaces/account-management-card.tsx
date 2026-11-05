@@ -156,7 +156,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
       {[{ label: "收入 / 月", value: seat.monthlyIncomeUsd }, { label: "分摊成本 / 月", value: seat.monthlyCostUsd },
         { label: "预计净收益 / 月", value: seat.monthlyNetUsd }].map(item =>
         <div key={item.label} className="flex min-w-0 items-baseline justify-between gap-3 sm:block"><dt className="text-[13px] text-muted-foreground">{item.label}</dt>
-          <dd className={cn("min-w-0 text-right text-sm sm:mt-1 sm:text-left", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className={cn("justify-end sm:justify-start [&_.text-xs]:text-[13px]", stacked && "flex-col items-start gap-y-0")} value={item.value} cnyRate={cnyRate} /></dd></div>)}
+          <dd className={cn("min-w-0 text-right text-sm sm:mt-1 sm:text-left", item.value !== null && item.value < 0 && "text-destructive")}><MoneyDisplay compact className={cn("justify-end sm:justify-start [&>span:first-child]:font-semibold [&_.text-xs]:text-[13px]", stacked && "flex-col items-start gap-y-0")} value={item.value} cnyRate={cnyRate} /></dd></div>)}
     </dl>;
   }
   const motherCurrency = currencies.find(c => c.code === mother.expectedCurrencyCode);
@@ -191,7 +191,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
         <div className={cn("grid items-start gap-3", business && "xl:grid-cols-2")}>
           {business && <section data-mother-seat className="min-w-0 space-y-3 rounded-md border p-3">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><h3 className="text-[13px] font-medium text-muted-foreground">{motherLabel}</h3><p className="mt-1 break-words font-mono text-sm [overflow-wrap:anywhere]">{mother.email.includes("@") ? <>{mother.email.slice(0, mother.email.lastIndexOf("@"))}<wbr />{mother.email.slice(mother.email.lastIndexOf("@"))}</> : mother.email}</p></div>
+              <div className="min-w-0"><h3 className="text-[13px] font-medium text-muted-foreground">{motherLabel}</h3><p className="mt-1 break-words font-mono text-sm font-medium [overflow-wrap:anywhere]">{mother.email.includes("@") ? <>{mother.email.slice(0, mother.email.lastIndexOf("@"))}<wbr />{mother.email.slice(mother.email.lastIndexOf("@"))}</> : mother.email}</p></div>
               <Badge variant="outline">{SEAT_USAGE_LABELS[motherSeat.usageStatus]}</Badge>
             </div>
             <dl className="grid gap-x-4 gap-y-2 text-[13px] sm:grid-cols-2">
@@ -234,7 +234,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
                 <div className="flex flex-wrap justify-end gap-1">
                   <Button size="sm" variant="outline" disabled={pending} onClick={() => editMember(account)}><Pencil className="size-3.5" />编辑</Button>
                   {seat.usageStatus === "rented" && <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmation({ action: "renew", role: "child", account })}><RefreshCw className="size-3.5" />续费</Button>}
-                  <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmation({ action: "delete", role: "child", account })}><Trash2 className="size-3.5" />删除</Button>
+                  <Button size="sm" variant="ghost" className="hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive" disabled={pending} onClick={() => setConfirmation({ action: "delete", role: "child", account })}><Trash2 className="size-3.5" />删除</Button>
                 </div>
                 </div>
                 </div>
@@ -274,7 +274,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
                 {status !== "rented" && <p id="account-billing-help" className="text-[13px] text-muted-foreground">当前{SEAT_USAGE_LABELS[status as SeatUsageStatus] ? "为“" + SEAT_USAGE_LABELS[status as SeatUsageStatus] + "”" : "尚未选择使用状态"}，收费输入已停用；切换为出租后可编辑。</p>}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5"><Label htmlFor="account-amount">约定收费 / 每周期</Label><Input id="account-amount" inputMode="decimal" value={amount} disabled={status !== "rented"}
+                <div className="space-y-1.5"><Label htmlFor="account-amount">约定收费 / 每周期</Label><Input id="account-amount" className="font-mono tabular-nums" inputMode="decimal" value={amount} disabled={status !== "rented"}
                   aria-invalid={saveError?.field === "amount"} aria-describedby={saveError?.field === "amount" ? "account-amount-error" : status !== "rented" ? "account-billing-help" : undefined}
                   onChange={event => { setAmount(event.target.value); if (saveError?.field === "amount") setSaveError(null); }} placeholder="例如：70.00" />
                   {saveError?.field === "amount" && <p id="account-amount-error" role="alert" className="text-[13px] text-destructive">{saveError.message}</p>}</div>
@@ -286,7 +286,7 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
                   <SelectTrigger id="account-period" className="w-full"><SelectValue /></SelectTrigger><SelectContent>{PERIODS.map(option =>
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                 </Select></div>
-                <div className="space-y-1.5"><Label htmlFor="account-payment-day">付款日（1–31）</Label><Input id="account-payment-day" type="number" min={1} max={31} required={editor?.role === "child" || status === "rented"} value={paymentDay} onChange={event => setPaymentDay(event.target.value)} /></div>
+                <div className="space-y-1.5"><Label htmlFor="account-payment-day">付款日（1–31）</Label><Input id="account-payment-day" className="font-mono tabular-nums" type="number" min={1} max={31} required={editor?.role === "child" || status === "rented"} value={paymentDay} onChange={event => setPaymentDay(event.target.value)} /></div>
               </div>
             </section>
             {saveError?.field === "form" && <p role="alert" className="rounded-md border border-destructive/25 bg-destructive/5 p-2.5 text-sm text-destructive md:col-span-2">{saveError.message}</p>}
@@ -298,10 +298,11 @@ export function AccountManagementCard({ earnings, mother, accounts, currencies, 
       </Dialog>
       <AlertDialog open={confirmation !== null} onOpenChange={open => { if (!open && !pending) setConfirmation(null); }}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{confirmation?.action === "delete" ? "删除" + memberLabel : "确认续费"}</AlertDialogTitle>
-          <AlertDialogDescription>{confirmation?.action === "delete" ? "将删除「" + confirmationEmail + "」这条成员记录。"
-            : "将按约定周期推进「" + confirmationEmail + "」的下一付款日，约定收费保持原值。"}</AlertDialogDescription>
+          <AlertDialogDescription><span data-account-confirmation-identity className="mb-2 block font-mono font-medium text-foreground [overflow-wrap:anywhere]">{confirmationEmail}</span>
+            {confirmation?.action === "delete" ? "将删除这条成员记录。"
+            : "将按约定周期推进下一付款日，约定收费保持原值。"}</AlertDialogDescription>
         </AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
-          <Button disabled={pending} variant={confirmation?.action === "delete" ? "destructive" : "default"} onClick={confirmAction}>{pending ? "处理中…" : "确认"}</Button>
+          <Button disabled={pending} variant={confirmation?.action === "delete" ? "destructive" : "default"} onClick={confirmAction}>{pending ? "处理中…" : confirmation?.action === "delete" ? "删除" + memberLabel : "确认续费"}</Button>
         </AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
     </Card>

@@ -47,7 +47,7 @@ export function CurrencyDeleteDialog({
     <AlertDialog open={currency !== null} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>删除此币种?</AlertDialogTitle>
+          <AlertDialogTitle className="break-words [overflow-wrap:anywhere]">删除币种：{currency?.name}（<span className="font-mono">{currency?.code}</span>）？</AlertDialogTitle>
           <AlertDialogDescription>
             删除会同时移除该币种的缓存汇率。若已有空间或子账号使用它，系统会阻止删除以保留历史金额口径。
           </AlertDialogDescription>

@@ -12,7 +12,7 @@ import {
 export default function LoginPage() {
   return (
     <main className="grid min-h-dvh lg:grid-cols-[minmax(0,1fr)_30rem]">
-      <section className="hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex xl:p-14">
+      <section className="hidden flex-col justify-between bg-primary p-8 text-primary-foreground lg:flex xl:p-10">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary-foreground/12 ring-1 ring-primary-foreground/20">
             <Layers3 aria-hidden="true" className="size-5" />
@@ -20,8 +20,9 @@ export default function LoginPage() {
           <span className="text-sm font-semibold">订阅管家</span>
         </div>
         <div className="max-w-xl">
-          <h2 className="text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
-            订阅、收款和续费，一处看清。
+          <h2 className="text-3xl font-semibold leading-snug tracking-tight xl:text-4xl">
+            <span className="block">订阅、收款和续费，</span>
+            <span className="block">一处看清。</span>
           </h2>
           <p className="mt-5 max-w-md text-sm leading-7 text-primary-foreground/72">
             管理 Business 账号与 Pro 拼车，核对成本和收益，及时处理到期续费。

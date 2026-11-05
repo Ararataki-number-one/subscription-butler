@@ -136,7 +136,7 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-52 basis-full sm:basis-auto sm:flex-1">
-            <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input aria-label="搜索渠道" type="search" value={query} onChange={e => setQuery(e.target.value)}
               className="pl-9" placeholder="搜索名称、平台、尾号或备注" />
           </div>
@@ -180,8 +180,8 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
               <col className="w-[296px]" />
             </colgroup>
             <TableHeader><TableRow>
-              <TableHead>支付渠道</TableHead><TableHead>手续费</TableHead>
-              <TableHead>关联订阅</TableHead><TableHead>当前周期成本</TableHead>
+              <TableHead>支付渠道</TableHead><TableHead className="text-right">手续费</TableHead>
+              <TableHead>关联订阅</TableHead><TableHead className="text-right">当前周期成本</TableHead>
               <TableHead>到期情况</TableHead><TableHead className="border-l bg-card text-right sm:sticky sm:right-0 sm:z-10">操作</TableHead>
             </TableRow></TableHeader>
             <TableBody>{visible.map(channel => {
@@ -202,11 +202,11 @@ export function ChannelTable({ channels, showArchived, usage, soonDays, cnyRate 
                   </Tooltip>
                   {cards[channel.id] && <p className="mt-1 text-xs text-muted-foreground">卡片已加密保存{cards[channel.id].last4 ? ` · •••• ${cards[channel.id].last4}` : ""}</p>}
                 </TableCell>
-                <TableCell data-label="手续费" className="font-mono">{channel.feePercent}%</TableCell>
+                <TableCell data-label="手续费" className="text-right font-mono">{channel.feePercent}%</TableCell>
                 <TableCell data-label="关联订阅" className="whitespace-normal"><p className="font-mono">{stats.total} 个</p>
                   <p className="text-xs text-muted-foreground">Business {stats.teamCount} · 其他 {stats.independentCount}</p>
                 </TableCell>
-                <TableCell data-label="本期成本" className="whitespace-normal"><MoneyDisplay compact value={stats.costUsdMinor} cnyRate={cnyRate} className="font-medium" />
+                <TableCell data-label="本期成本" className="whitespace-normal text-right"><MoneyDisplay value={stats.costUsdMinor} cnyRate={cnyRate} className="items-end gap-0.5 font-medium" />
                   {stats.missingCostCount > 0 && <p className="text-xs text-muted-foreground">{stats.missingCostCount} 笔待换算</p>}
                 </TableCell>
                 <TableCell data-label="最近到期"><p className="font-mono text-xs">{stats.nextExpiryDate ?? "—"}</p>

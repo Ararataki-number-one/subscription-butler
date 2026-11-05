@@ -456,6 +456,7 @@ function SpaceEditorForm({
                   <FormLabel>订阅金额（不含手续费）</FormLabel>
                   <FormControl>
                     <Input
+                      className="font-mono tabular-nums"
                       inputMode="decimal"
                       placeholder="19.99"
                       value={amountInput}
@@ -466,8 +467,8 @@ function SpaceEditorForm({
                     />
                   </FormControl>
                   {feePreview && selectedCurrencyMeta && <p className="text-xs leading-5 text-muted-foreground">
-                    手续费 {selectedFeePercent}%：{formatCurrencyMinor(feePreview.feeAmountMinor, selectedCurrencyMeta)} ·
-                    合计 {formatCurrencyMinor(feePreview.totalAmountMinor, selectedCurrencyMeta)}
+                    手续费 <span className="font-mono tabular-nums">{selectedFeePercent}%：{formatCurrencyMinor(feePreview.feeAmountMinor, selectedCurrencyMeta)}</span> ·
+                    合计 <span className="font-mono font-medium tabular-nums text-foreground">{formatCurrencyMinor(feePreview.totalAmountMinor, selectedCurrencyMeta)}</span>
                   </p>}
                   {isDetailLayout ? null : (
                     <p className="text-xs text-muted-foreground">
@@ -539,7 +540,7 @@ function SpaceEditorForm({
               className={cn(
                 isDetailLayout
                   ? "space-y-2 border-b border-border/60 pb-4"
-                  : "grid grid-cols-[1fr_120px] gap-2",
+                  : "min-w-0",
               )}
             >
               {isDetailLayout ? (
@@ -587,6 +588,7 @@ function SpaceEditorForm({
                     </FormLabel>
                     <FormControl>
                       <Input
+                        className="font-mono tabular-nums"
                         type="number"
                         min={1}
                         {...field}

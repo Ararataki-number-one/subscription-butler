@@ -20,7 +20,7 @@ export default function SettingsPage() {
   const mfaStatus = getMfaStatus(db);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
       <WorkspacePageHeading title="设置" />
       <nav aria-label="设置分类" className="sticky top-14 z-20 flex flex-wrap gap-1 border-b bg-background py-2 text-sm text-primary [&_a]:rounded-md [&_a]:px-3 [&_a]:py-2 [&_a:hover]:bg-accent [&_a:focus-visible]:outline-2 [&_a:focus-visible]:outline-ring"><a href="#reminder-thresholds">提醒天数</a><a href="#space-email-settings">空间邮件</a><a href="#child-email-settings">子账号邮件</a><a href="#security-settings">登录安全</a></nav>
       <section id="expiry-settings" className="grid scroll-mt-20 items-start gap-4 lg:grid-cols-2">

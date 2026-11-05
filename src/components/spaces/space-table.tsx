@@ -324,7 +324,7 @@ export function SpaceTable({
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-0 flex-col overflow-hidden">
       <div className="shrink-0 px-4 py-4 sm:px-6 lg:px-8">
       <WorkspacePageHeading title="空间与账号" actions={<Button onClick={() => setFormState({ mode: "add" })}><Plus className="size-4" />新增空间 / 账号</Button>} />
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
+        <div role="group" aria-label="订阅筛选" className="grid grid-cols-2 gap-2 lg:grid-cols-[minmax(220px,1fr)_160px_160px_160px]">
           <div className="relative col-span-2 lg:col-span-1">
             <Label htmlFor="space-email-filter" className="sr-only">
               账号 / 母号 / 子号邮箱
@@ -348,14 +348,14 @@ export function SpaceTable({
             setPage(1);
             router.push(buildHref(selectedCountry, selectedChannel, value === "all" ? undefined : value));
           }}>
-            <SelectTrigger className="w-full" aria-label="按订阅类型筛选"><SelectValue>{SPACE_PLAN_OPTIONS.find(option => option.value === selectedPlan)?.label ?? "全部订阅类型"}</SelectValue></SelectTrigger>
+            <SelectTrigger className={`w-full ${selectedPlan ? "border-primary/45 bg-primary/5" : ""}`} aria-label="按订阅类型筛选"><SelectValue>{SPACE_PLAN_OPTIONS.find(option => option.value === selectedPlan)?.label ?? "全部订阅类型"}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部订阅类型</SelectItem>
               {SPACE_PLAN_OPTIONS.map(option => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={selectedCountry ?? "all"} onValueChange={setCountry}>
-            <SelectTrigger className="w-full" aria-label="按国家/地区筛选">
+            <SelectTrigger className={`w-full ${selectedCountry ? "border-primary/45 bg-primary/5" : ""}`} aria-label="按国家/地区筛选">
               <SelectValue>{countryOptions.find(country => country.code === selectedCountry)?.label ?? "全部国家/地区"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -371,7 +371,7 @@ export function SpaceTable({
             value={selectedChannel ? String(selectedChannel) : "all"}
             onValueChange={setChannel}
           >
-            <SelectTrigger className="col-span-2 w-full lg:col-span-1" aria-label="按支付渠道筛选">
+            <SelectTrigger className={`col-span-2 w-full lg:col-span-1 ${selectedChannel ? "border-primary/45 bg-primary/5" : ""}`} aria-label="按支付渠道筛选">
               <SelectValue>{channelOptions.find(channel => channel.id === selectedChannel)?.name ?? "全部渠道"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -398,7 +398,7 @@ export function SpaceTable({
           <dl className="mt-1 grid grid-cols-3 gap-3 text-xs">
             <div className="min-w-0"><dt className="text-muted-foreground">约定收入</dt><dd className="mt-0.5 text-sm"><MoneyDisplay value={group.income} cnyRate={cnyRate} className="gap-0 font-medium" /></dd></div>
             <div className="min-w-0"><dt className="text-muted-foreground">成本</dt><dd className="mt-0.5 text-sm"><MoneyDisplay value={group.cost} cnyRate={cnyRate} className="gap-0 font-medium" /></dd></div>
-            <div className="min-w-0 border-l pl-3"><dt className="text-muted-foreground">预计净收益</dt><dd className={`mt-0.5 text-sm ${group.net === null ? "text-muted-foreground" : group.net < 0 ? "text-destructive" : "text-primary"}`}><MoneyDisplay value={group.net} cnyRate={cnyRate} className="gap-0 font-semibold [&>span:first-child]:text-base" /></dd></div>
+            <div className="min-w-0 border-l pl-3"><dt className="text-muted-foreground">预计净收益</dt><dd className={`mt-0.5 text-sm ${group.net === null ? "text-muted-foreground" : group.net < 0 ? "text-destructive" : "text-primary"}`}><MoneyDisplay value={group.net} cnyRate={cnyRate} className="gap-0 font-semibold [&>span:first-child]:text-base [&>span:first-child]:leading-5" /></dd></div>
           </dl>
         </div>)}
       </div>
@@ -491,7 +491,7 @@ export function SpaceTable({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Link href={`/spaces/${space.id}`} className="block min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/40">
-                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-words font-medium">{space.name}</span><Badge variant="outline">{spacePlanLabel(space.planType, space.customPlanName)}</Badge>{isProPlan(space.planType) && <span className="text-xs text-muted-foreground">拼车</span>}</span>
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="break-words font-semibold">{space.name}</span><Badge variant="outline">{spacePlanLabel(space.planType, space.customPlanName)}</Badge>{isProPlan(space.planType) && <span className="text-xs text-muted-foreground">拼车</span>}</span>
                           <span className="mt-0.5 block truncate font-mono text-xs text-muted-foreground">{motherAccount.email}</span>
                         </Link>
                       </TooltipTrigger>

@@ -74,6 +74,7 @@ export function SpaceDetailActions({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
+            variant={isEditing ? "outline" : "default"}
             onClick={() => setRenewOpen(true)}
             disabled={isRenewing || isEditing || !space.id}
           >
@@ -140,6 +141,7 @@ export function SpaceDetailActions({
           {isEditing ? "返回只读详情" : "在页面内编辑空间"}
         </TooltipContent>
       </Tooltip>
+      <span data-space-danger-actions className="ml-1 inline-flex border-l pl-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -154,6 +156,7 @@ export function SpaceDetailActions({
         </TooltipTrigger>
         <TooltipContent>删除空间</TooltipContent>
       </Tooltip>
+      </span>
       {space.id ? (
         <SpaceDeleteDialog
           open={deleteOpen}

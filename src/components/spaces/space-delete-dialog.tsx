@@ -71,13 +71,14 @@ export function SpaceDeleteDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>删除空间</AlertDialogTitle>
           <AlertDialogDescription>
-            将删除「{space.name}」、关联账号、所有子账号及收款记录。
+            <span data-space-delete-identity className="mb-2 block font-medium text-foreground [overflow-wrap:anywhere]">{space.name}</span>
+            将删除此空间、关联账号、所有子账号及收款记录。
             当前共有 {childCount} 个子账号。此操作不可撤销。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-2">
           <label htmlFor="space-delete-confirmation" className="text-sm">
-            输入空间名称「{space.name}」以确认删除。
+            输入完整空间名称以确认删除。
           </label>
           <Input
             id="space-delete-confirmation"

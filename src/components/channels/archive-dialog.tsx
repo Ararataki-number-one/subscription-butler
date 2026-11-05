@@ -50,7 +50,7 @@ export function ArchiveDialog({ channel, linkedCount = 0, onOpenChange }: Archiv
     <AlertDialog open={channel !== null} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>归档此渠道?</AlertDialogTitle>
+          <AlertDialogTitle className="break-words [overflow-wrap:anywhere]">归档渠道：{channel?.name}？</AlertDialogTitle>
           <AlertDialogDescription>
             当前关联 {linkedCount} 个订阅。归档后不能用于新建订阅，已有记录仍保留关联并可继续编辑。你可以随时恢复渠道。
           </AlertDialogDescription>
